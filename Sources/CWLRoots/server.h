@@ -1,0 +1,192 @@
+//
+//  server.h
+//  swift-linux-shell
+//
+//  The shim's own types, shared by its source files. Not visible to Swift.
+//
+
+#ifndef CWL_SERVER_H
+#define CWL_SERVER_H
+
+#if defined(__linux__)
+
+#include <wayland-server-core.h>
+#include <wlr/backend.h>
+#include <wlr/render/allocator.h>
+#include <wlr/render/wlr_renderer.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/util/box.h>
+#include <wlr/util/log.h>
+#include <xkbcommon/xkbcommon.h>
+
+#include "CWLRoots.h"
+
+/// The scene trees for layer surfaces, indexed by
+/// `enum zwlr_layer_shell_v1_layer`. Windows sit between bottom and top.
+#define CWL_LAYER_COUNT 4
+
+/// What a scene node's `data` points to. Every such struct starts with this.
+enum cwl_node_kind {
+    CWL_NODE_TOPLEVEL = 1,
+    CWL_NODE_LAYER_SURFACE = 2
+};
+
+struct CWLServer {
+    CWLServerCallbacks callbacks;
+
+    struct wl_display *display;
+    struct wlr_backend *backend;
+    struct wlr_renderer *renderer;
+    struct wlr_allocator *allocator;
+
+    struct wlr_scene *scene;
+    struct wlr_output_layout *output_layout;
+    struct wlr_scene_output_layout *scene_layout;
+    struct wlr_scene_tree *layers[CWL_LAYER_COUNT];
+    struct wlr_scene_tree *windows;
+
+    struct wl_list outputs;   // struct cwl_output.link
+    struct wl_list toplevels; // CWLToplevel.link
+    struct wl_list keyboards; // struct cwl_keyboard.link
+    struct wl_list appmenus;  // struct cwl_appmenu.link
+
+    struct wlr_xdg_shell *xdg_shell;
+    struct wlr_layer_shell_v1 *layer_shell;
+    struct wlr_seat *seat;
+    struct wlr_cursor *cursor;
+    struct wlr_xcursor_manager *cursor_manager;
+    struct wl_global *appmenu_global;
+    struct wl_global *dock_global;
+
+    CWLBox usable_area;
+    const char *socket;
+
+    struct wl_listener new_output;
+    struct wl_listener new_input;
+    struct wl_listener new_toplevel;
+    struct wl_listener new_popup;
+    struct wl_listener new_layer_surface;
+    struct wl_listener cursor_motion;
+    struct wl_listener cursor_motion_absolute;
+    struct wl_listener cursor_button;
+    struct wl_listener cursor_axis;
+    struct wl_listener cursor_frame;
+    struct wl_listener request_cursor;
+    struct wl_listener request_set_selection;
+};
+
+struct cwl_output {
+    struct wl_list link;
+    CWLServer *server;
+    struct wlr_output *wlr_output;
+    struct wl_list layer_surfaces; // struct cwl_layer_surface.link
+    /// The output's box less the exclusive zones of its layer surfaces.
+    struct wlr_box usable_area;
+    struct wl_listener frame;
+    struct wl_listener request_state;
+    struct wl_listener destroy;
+};
+
+struct CWLToplevel {
+    enum cwl_node_kind kind;
+    struct wl_list link;
+    CWLServer *server;
+    struct wlr_xdg_toplevel *xdg_toplevel;
+    struct wlr_scene_tree *scene_tree;
+    bool mapped;
+    struct wl_listener map;
+    struct wl_listener unmap;
+    struct wl_listener commit;
+    struct wl_listener destroy;
+    struct wl_listener set_title;
+    struct wl_listener set_app_id;
+};
+
+struct cwl_popup {
+    struct wlr_xdg_popup *xdg_popup;
+    struct wl_listener commit;
+    struct wl_listener destroy;
+};
+
+struct cwl_layer_surface {
+    enum cwl_node_kind kind;
+    struct wl_list link;
+    CWLServer *server;
+    struct cwl_output *output;
+    struct wlr_layer_surface_v1 *layer_surface;
+    struct wlr_scene_layer_surface_v1 *scene;
+    struct wl_listener map;
+    struct wl_listener unmap;
+    struct wl_listener commit;
+    struct wl_listener destroy;
+};
+
+struct cwl_keyboard {
+    struct wl_list link;
+    CWLServer *server;
+    struct wlr_keyboard *wlr_keyboard;
+    struct wl_listener modifiers;
+    struct wl_listener key;
+    struct wl_listener destroy;
+};
+
+struct cwl_appmenu {
+    struct wl_list link;
+    CWLServer *server;
+    struct wl_resource *resource;
+    struct wlr_surface *surface;
+    char *service;
+    char *path;
+    struct wl_listener surface_destroy;
+};
+
+// MARK: toplevel.c
+
+void cwl_handle_new_toplevel(struct wl_listener *listener, void *data);
+void cwl_handle_new_popup(struct wl_listener *listener, void *data);
+
+/// The window a surface belongs to, or NULL.
+CWLToplevel *cwl_toplevel_from_surface(CWLServer *server, struct wlr_surface *surface);
+
+// MARK: layer.c
+
+void cwl_handle_new_layer_surface(struct wl_listener *listener, void *data);
+
+/// Configures every layer surface on an output and recomputes the usable
+/// area. Exclusive zones are applied from the overlay layer down.
+void cwl_output_arrange_layers(struct cwl_output *output);
+
+/// Closes the layer surfaces on an output that is going away.
+void cwl_output_close_layer_surfaces(struct cwl_output *output);
+
+// MARK: appmenu.c
+
+bool cwl_appmenu_init(CWLServer *server);
+
+/// The appmenu object for a surface, or NULL.
+struct cwl_appmenu *cwl_appmenu_for_surface(CWLServer *server, struct wlr_surface *surface);
+
+// MARK: dock.c
+
+bool cwl_dock_init(CWLServer *server);
+
+// MARK: server.c
+
+/// Recomputes the usable area and tells Swift if it changed.
+void cwl_server_update_usable_area(CWLServer *server);
+
+#endif
+#endif
