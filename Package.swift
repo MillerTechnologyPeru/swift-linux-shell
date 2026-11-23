@@ -11,9 +11,11 @@ import PackageDescription
 /// - `CacaoSettings`: the settings daemon and portal backend.
 /// - `CacaoShellKit`: what the four share: form factor, desktop entries,
 ///   D-Bus names and settings, and the Swift side of the dock protocol.
+/// - `CWLRoots`: the C shim over wlroots, with the protocol handlers.
 /// - `CShellProtocols`: code generated from protocol XML.
 ///
-/// The compositor's C targets build on Linux only.
+/// The compositor and its C targets build on Linux only. One wlroots
+/// release is pinned: 0.18.
 let package = Package(
     name: "CacaoShell",
     platforms: [
@@ -102,11 +104,34 @@ let package = Package(
 
 // MARK: - Compositor
 
-// The compositor's C targets need Wayland, so they build on Linux only.
+// The compositor needs wlroots and libwayland-server, so it builds on Linux
+// only.
 #if os(Linux)
 var compositorProducts: [Product] { [] }
 var compositorTargets: [Target] {
     [
+        .target(
+            name: "CWLRoots",
+            dependencies: [
+                "CWLRootsSystem",
+                "CShellProtocols"
+            ],
+            cSettings: [
+                .define("WLR_USE_UNSTABLE")
+            ],
+            linkerSettings: [
+                .linkedLibrary("wayland-server"),
+                .linkedLibrary("xkbcommon")
+            ]
+        ),
+        // wlroots' include and library paths, from pkg-config.
+        .systemLibrary(
+            name: "CWLRootsSystem",
+            pkgConfig: "wlroots-0.18",
+            providers: [
+                .apt(["libwlroots-0.18-dev"])
+            ]
+        ),
         .target(
             name: "CShellProtocols",
             exclude: ["protocol"]
