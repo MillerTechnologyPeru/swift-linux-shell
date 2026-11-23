@@ -1,0 +1,27 @@
+# sway as the stand-in compositor for the Cacao session (phases 1 to 6).
+#
+# Every window floats, so behavior stays close to the final desktop. There is
+# no swaybar: the menu bar and dock are Cacao's.
+
+set $mod Mod4
+
+# Windows
+for_window [all] floating enable
+default_border normal 1
+default_floating_border normal 1
+floating_modifier $mod normal
+focus_follows_mouse no
+
+# Session
+bindsym $mod+q kill
+bindsym $mod+Shift+e exec swaymsg exit
+bindsym $mod+Shift+c reload
+
+# xdg-desktop-portal and D-Bus activated services need the session's
+# Wayland display and desktop name.
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
+
+# The shell
+exec CacaoSettings
+exec CacaoMenuBar
+exec CacaoDock
