@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="cacao_dock_unstable_v1">
+  <copyright>
+    Copyright © 2026 Alsey Coleman Miller
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice (including the next
+    paragraph) shall be included in all copies or substantial portions of the
+    Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+  </copyright>
+
+  <description summary="private link between the Cacao dock and compositor">
+    The one private protocol of the Cacao desktop. The window list comes from
+    an existing protocol; this one carries only what no existing protocol
+    does: where minimized windows go, window previews, and the Exposé
+    trigger.
+
+    Only the dock is expected to bind it. It is unstable: both ends live in
+    the swift-linux-shell repository and change together.
+  </description>
+
+  <interface name="zcacao_dock_manager_v1" version="1">
+    <description summary="the dock's requests to the compositor">
+      A global the compositor advertises for the dock.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the manager">
+        Minimize targets set through this object are removed.
+      </description>
+    </request>
+
+    <request name="set_minimize_target">
+      <description summary="where an app's windows minimize to">
+        Sets the rectangle, in the given surface's coordinates, that windows
+        with this app_id animate to when minimized and from when restored.
+        Usually the app's icon in the dock. Replaces any earlier rectangle
+        for the same app_id.
+      </description>
+      <arg name="app_id" type="string" summary="Wayland app_id the target is for"/>
+      <arg name="surface" type="object" interface="wl_surface" summary="surface the rectangle is relative to"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </request>
+
+    <request name="unset_minimize_target">
+      <description summary="forget where an app's windows minimize to"/>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <enum name="expose_mode">
+      <entry name="all_windows" value="0" summary="every window on the current workspace"/>
+      <entry name="app_windows" value="1" summary="the windows of one app"/>
+      <entry name="desktop" value="2" summary="move windows aside to show the desktop"/>
+    </enum>
+
+    <request name="show_expose">
+      <description summary="start Exposé">
+        Asks the compositor to lay out windows for picking. If Exposé is
+        already showing in the same mode, it ends.
+      </description>
+      <arg name="mode" type="uint" enum="expose_mode"/>
+      <arg name="app_id" type="string" allow-null="true" summary="the app, for app_windows"/>
+    </request>
+
+    <request name="get_preview">
+      <description summary="ask for a picture of a window">
+        Creates a preview of one window, named by its ext-foreign-toplevel-list
+        identifier, scaled to fit within the given size.
+      </description>
+      <arg name="id" type="new_id" interface="zcacao_dock_preview_v1"/>
+      <arg name="toplevel_identifier" type="string"/>
+      <arg name="max_width" type="int"/>
+      <arg name="max_height" type="int"/>
+    </request>
+  </interface>
+
+  <interface name="zcacao_dock_preview_v1" version="1">
+    <description summary="a picture of one window">
+      The compositor first sends buffer with the size and format it will draw.
+      The client then sends copy with a wl_shm buffer of that size, and the
+      compositor answers with ready or failed. After either, the object can
+      only be destroyed.
+    </description>
+
+    <request name="destroy" type="destructor"/>
+
+    <event name="buffer">
+      <description summary="the buffer the client should provide"/>
+      <arg name="format" type="uint" summary="wl_shm format"/>
+      <arg name="width" type="uint"/>
+      <arg name="height" type="uint"/>
+      <arg name="stride" type="uint"/>
+    </event>
+
+    <request name="copy">
+      <description summary="draw the window into a buffer"/>
+      <arg name="buffer" type="object" interface="wl_buffer"/>
+    </request>
+
+    <event name="ready">
+      <description summary="the buffer holds the picture"/>
+    </event>
+
+    <event name="failed">
+      <description summary="no picture could be made">
+        The window is gone, the buffer did not match, or previews are not
+        supported yet.
+      </description>
+    </event>
+  </interface>
+</protocol>
