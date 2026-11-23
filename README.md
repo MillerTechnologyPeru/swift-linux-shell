@@ -35,3 +35,16 @@ Until `CacaoWindowServer` replaces it, sway runs the session with `Data/sway/con
 ```sh
 swift run CacaoWindowServer -s foot
 ```
+
+### CMake
+
+A CMake build sits beside SwiftPM, as in Cacao, for system images such as Buildroot. It installs the executables, `CacaoShellKit` beside Cacao's libraries in the Swift resource directory, and the session's data files. Cacao and PureSwift/DBus must be where the compiler finds them; `.github/scripts/build-cmake-dependencies.sh` builds both into one directory:
+
+```sh
+.github/scripts/build-cmake-dependencies.sh "$PWD/dependencies"
+cmake -B build -G Ninja -DCMAKE_Swift_FLAGS="-I $PWD/dependencies -L $PWD/dependencies"
+cmake --build build
+cmake --install build
+```
+
+`CACAO_SHELL_BUILD_APPS=OFF` leaves out the menu bar and dock, and `CACAO_SHELL_BUILD_COMPOSITOR=OFF` the compositor.
