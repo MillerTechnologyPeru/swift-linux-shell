@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Cacao
+Comment=The Cacao desktop
+Exec=cacao-session
+DesktopNames=Cacao

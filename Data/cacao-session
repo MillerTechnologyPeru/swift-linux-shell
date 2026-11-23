@@ -1,0 +1,10 @@
+#!/bin/sh
+# Starts the Cacao session. Until CacaoWindowServer replaces it, sway is the
+# compositor, with a config that floats every window.
+
+export XDG_CURRENT_DESKTOP=Cacao
+export XDG_SESSION_DESKTOP=cacao
+export XDG_SESSION_TYPE=wayland
+
+CONFIG="${CACAO_SWAY_CONFIG:-/usr/share/cacao/sway/config}"
+exec sway --config "$CONFIG" "$@"
