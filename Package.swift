@@ -7,6 +7,7 @@ import PackageDescription
 ///
 /// - `CacaoMenuBar`: the menu bar, and the status bar in tablet and phone
 ///   modes.
+/// - `CacaoDock`: the dock, the app grid and launcher entries.
 /// - `CacaoSettings`: the settings daemon and portal backend.
 /// - `CacaoShellKit`: what the four share: form factor, desktop entries,
 ///   D-Bus names and settings, and the Swift side of the dock protocol.
@@ -23,6 +24,10 @@ let package = Package(
         .executable(
             name: "CacaoMenuBar",
             targets: ["CacaoMenuBar"]
+        ),
+        .executable(
+            name: "CacaoDock",
+            targets: ["CacaoDock"]
         ),
         .executable(
             name: "CacaoSettings",
@@ -51,6 +56,16 @@ let package = Package(
         ),
         .executableTarget(
             name: "CacaoMenuBar",
+            dependencies: [
+                "CacaoShellKit",
+                .product(
+                    name: "CacaoSDL",
+                    package: "Cacao"
+                )
+            ]
+        ),
+        .executableTarget(
+            name: "CacaoDock",
             dependencies: [
                 "CacaoShellKit",
                 .product(
