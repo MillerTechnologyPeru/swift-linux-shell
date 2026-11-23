@@ -1,0 +1,4 @@
+module CShellProtocols {
+    header "CShellProtocols.h"
+    export *
+}

@@ -11,6 +11,9 @@ import PackageDescription
 /// - `CacaoSettings`: the settings daemon and portal backend.
 /// - `CacaoShellKit`: what the four share: form factor, desktop entries,
 ///   D-Bus names and settings, and the Swift side of the dock protocol.
+/// - `CShellProtocols`: code generated from protocol XML.
+///
+/// The compositor's C targets build on Linux only.
 let package = Package(
     name: "CacaoShell",
     platforms: [
@@ -33,7 +36,7 @@ let package = Package(
             name: "CacaoSettings",
             targets: ["CacaoSettings"]
         )
-    ],
+    ] + compositorProducts,
     dependencies: [
         .package(
             url: "https://github.com/PureSwift/Cacao.git",
@@ -94,5 +97,23 @@ let package = Package(
                 )
             ]
         )
-    ]
+    ] + compositorTargets
 )
+
+// MARK: - Compositor
+
+// The compositor's C targets need Wayland, so they build on Linux only.
+#if os(Linux)
+var compositorProducts: [Product] { [] }
+var compositorTargets: [Target] {
+    [
+        .target(
+            name: "CShellProtocols",
+            exclude: ["protocol"]
+        )
+    ]
+}
+#else
+var compositorProducts: [Product] { [] }
+var compositorTargets: [Target] { [] }
+#endif
