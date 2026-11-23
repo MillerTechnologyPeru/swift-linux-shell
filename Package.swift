@@ -5,6 +5,8 @@ import PackageDescription
 ///
 /// See `Documentation/Plan.md` for the architecture. In short:
 ///
+/// - `CacaoWindowServer`: the compositor. Window policy in Swift, over
+///   wlroots through the `CWLRoots` shim.
 /// - `CacaoMenuBar`: the menu bar, and the status bar in tablet and phone
 ///   modes.
 /// - `CacaoDock`: the dock, the app grid and launcher entries.
@@ -107,9 +109,23 @@ let package = Package(
 // The compositor needs wlroots and libwayland-server, so it builds on Linux
 // only.
 #if os(Linux)
-var compositorProducts: [Product] { [] }
+var compositorProducts: [Product] {
+    [
+        .executable(
+            name: "CacaoWindowServer",
+            targets: ["CacaoWindowServer"]
+        )
+    ]
+}
 var compositorTargets: [Target] {
     [
+        .executableTarget(
+            name: "CacaoWindowServer",
+            dependencies: [
+                "CacaoShellKit",
+                "CWLRoots"
+            ]
+        ),
         .target(
             name: "CWLRoots",
             dependencies: [
