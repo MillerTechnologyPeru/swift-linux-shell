@@ -5,6 +5,7 @@ import PackageDescription
 ///
 /// See `Documentation/Plan.md` for the architecture. In short:
 ///
+/// - `CacaoSettings`: the settings daemon and portal backend.
 /// - `CacaoShellKit`: what the four share: form factor, desktop entries,
 ///   D-Bus names and settings, and the Swift side of the dock protocol.
 let package = Package(
@@ -16,6 +17,10 @@ let package = Package(
         .library(
             name: "CacaoShellKit",
             targets: ["CacaoShellKit"]
+        ),
+        .executable(
+            name: "CacaoSettings",
+            targets: ["CacaoSettings"]
         )
     ],
     dependencies: [
@@ -28,6 +33,16 @@ let package = Package(
         .target(
             name: "CacaoShellKit",
             dependencies: [
+                .product(
+                    name: "DBus",
+                    package: "DBus"
+                )
+            ]
+        ),
+        .executableTarget(
+            name: "CacaoSettings",
+            dependencies: [
+                "CacaoShellKit",
                 .product(
                     name: "DBus",
                     package: "DBus"
