@@ -59,7 +59,8 @@ let package = Package(
                     name: "DBus",
                     package: "DBus"
                 )
-            ]
+            ],
+            exclude: ["CMakeLists.txt"]
         ),
         .executableTarget(
             name: "CacaoMenuBar",
@@ -69,7 +70,8 @@ let package = Package(
                     name: "CacaoSDL",
                     package: "Cacao"
                 )
-            ]
+            ],
+            exclude: ["CMakeLists.txt"]
         ),
         .executableTarget(
             name: "CacaoDock",
@@ -79,7 +81,8 @@ let package = Package(
                     name: "CacaoSDL",
                     package: "Cacao"
                 )
-            ]
+            ],
+            exclude: ["CMakeLists.txt"]
         ),
         .executableTarget(
             name: "CacaoSettings",
@@ -89,7 +92,8 @@ let package = Package(
                     name: "DBus",
                     package: "DBus"
                 )
-            ]
+            ],
+            exclude: ["CMakeLists.txt"]
         ),
         .testTarget(
             name: "CacaoShellKitTests",
@@ -124,7 +128,8 @@ var compositorTargets: [Target] {
             dependencies: [
                 "CacaoShellKit",
                 "CWLRoots"
-            ]
+            ],
+            exclude: ["CMakeLists.txt"]
         ),
         .target(
             name: "CWLRoots",
@@ -132,6 +137,7 @@ var compositorTargets: [Target] {
                 "CWLRootsSystem",
                 "CShellProtocols"
             ],
+            exclude: ["CMakeLists.txt"],
             cSettings: [
                 .define("WLR_USE_UNSTABLE")
             ],
@@ -150,7 +156,7 @@ var compositorTargets: [Target] {
         ),
         .target(
             name: "CShellProtocols",
-            exclude: ["protocol"]
+            exclude: ["protocol", "CMakeLists.txt"]
         )
     ]
 }
