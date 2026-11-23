@@ -5,6 +5,8 @@ import PackageDescription
 ///
 /// See `Documentation/Plan.md` for the architecture. In short:
 ///
+/// - `CacaoMenuBar`: the menu bar, and the status bar in tablet and phone
+///   modes.
 /// - `CacaoSettings`: the settings daemon and portal backend.
 /// - `CacaoShellKit`: what the four share: form factor, desktop entries,
 ///   D-Bus names and settings, and the Swift side of the dock protocol.
@@ -19,11 +21,19 @@ let package = Package(
             targets: ["CacaoShellKit"]
         ),
         .executable(
+            name: "CacaoMenuBar",
+            targets: ["CacaoMenuBar"]
+        ),
+        .executable(
             name: "CacaoSettings",
             targets: ["CacaoSettings"]
         )
     ],
     dependencies: [
+        .package(
+            url: "https://github.com/PureSwift/Cacao.git",
+            branch: "develop"
+        ),
         .package(
             url: "https://github.com/PureSwift/DBus.git",
             branch: "master"
@@ -36,6 +46,16 @@ let package = Package(
                 .product(
                     name: "DBus",
                     package: "DBus"
+                )
+            ]
+        ),
+        .executableTarget(
+            name: "CacaoMenuBar",
+            dependencies: [
+                "CacaoShellKit",
+                .product(
+                    name: "CacaoSDL",
+                    package: "Cacao"
                 )
             ]
         ),
