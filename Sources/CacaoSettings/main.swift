@@ -31,33 +31,7 @@ do {
 }
 
 let portal = PortalSettings(store: store)
-
-let settingChanged = DBusMessage.Signal(
-    path: ShellDBus.portalPath,
-    interface: ShellDBus.portalSettingsBackendInterface,
-    name: DBusMember(rawValue: "SettingChanged")!
-)
-
-await connection.export(DBusExportedObject([portal.portalBackend()]), at: ShellDBus.portalPath)
-await connection.export(
-    DBusExportedObject([
-        portal.shellInterface { changes in
-            for change in changes {
-                log("\(change.namespace) \(change.key) changed")
-                do {
-                    try await connection.emit(settingChanged, arguments: [
-                        .string(change.namespace),
-                        .string(change.key),
-                        change.value.variant,
-                    ])
-                } catch {
-                    log("Could not emit SettingChanged: \(error)")
-                }
-            }
-        }
-    ]),
-    at: ShellDBus.settingsPath
-)
+await portal.export(on: connection)
 
 for name in [ShellDBus.portalBackendName, ShellDBus.settingsName] {
     do {
