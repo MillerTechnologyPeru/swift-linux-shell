@@ -15,6 +15,7 @@ import PackageDescription
 ///   D-Bus names and settings, and the Swift side of the dock protocol.
 /// - `CWLRoots`: the C shim over wlroots, with the protocol handlers.
 /// - `CShellProtocols`: code generated from protocol XML.
+/// - `CToplevelList`: the dock's client of the compositor's window list.
 ///
 /// The compositor and its C targets build on Linux only. One wlroots
 /// release is pinned: 0.18.
@@ -83,6 +84,15 @@ let package = Package(
                 )
             ],
             exclude: ["CMakeLists.txt"]
+        ),
+        // The dock's client of wlr-foreign-toplevel-management. Elsewhere
+        // than Linux it compiles to stubs.
+        .target(
+            name: "CToplevelList",
+            exclude: ["protocol", "CMakeLists.txt"],
+            linkerSettings: [
+                .linkedLibrary("wayland-client", .when(platforms: [.linux]))
+            ]
         ),
         .executableTarget(
             name: "CacaoSettings",

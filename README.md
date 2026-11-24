@@ -15,6 +15,7 @@ The Cacao desktop: a compositor, menu bar, dock and settings service, written in
 | `CacaoShellKit` | Library | Form factor, desktop entries, D-Bus names and settings, and the Swift side of the dock protocol |
 | `CWLRoots` | C target | The thin C shim over wlroots |
 | `CShellProtocols` | C target | Code generated from protocol XML by `Scripts/generate-protocols.sh` |
+| `CToplevelList` | C target | The dock's client of the compositor's window list (wlr-foreign-toplevel-management) |
 
 - `Protocols/` holds the private dock protocol, and the third-party protocol XML the generated code comes from.
 - `Data/` holds the portal registration, the D-Bus service file, the session entry and the sway config for the stand-in session.
