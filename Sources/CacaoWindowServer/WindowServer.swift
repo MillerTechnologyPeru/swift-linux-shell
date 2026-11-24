@@ -194,6 +194,7 @@ final class WindowServer {
 
     private func usableAreaChanged(_ area: CWLBox) {
         usableArea = area
+        log("Usable area: \(area.width)×\(area.height) at \(area.x),\(area.y)")
         policy.usableAreaChanged(area, server: self)
     }
 
