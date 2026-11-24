@@ -50,7 +50,8 @@ jobs:
             libwayland-dev wayland-protocols libdecor-0-dev libdrm-dev \
             libgbm-dev libegl-dev libgl-dev libgles-dev libvulkan-dev \
             libdbus-1-dev libudev-dev libpulse-dev libasound2-dev \
-            libwlroots-0.18-dev fonts-dejavu-core
+            libwlroots-0.18-dev fonts-dejavu-core \
+            dbus-daemon
       # The SDL3 Cacao is developed against, which is newer than Debian's.
       - name: Cache SDL3
         id: cache-sdl3
