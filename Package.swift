@@ -81,6 +81,16 @@ let package = Package(
                 .product(
                     name: "CacaoSDL",
                     package: "Cacao"
+                ),
+                // The compositor's window list, polled from the app's loop.
+                .target(
+                    name: "CToplevelList",
+                    condition: .when(platforms: [.linux])
+                ),
+                .product(
+                    name: "CacaoHost",
+                    package: "Cacao",
+                    condition: .when(platforms: [.linux])
                 )
             ],
             exclude: ["CMakeLists.txt"]
