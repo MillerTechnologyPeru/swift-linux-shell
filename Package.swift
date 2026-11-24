@@ -96,6 +96,17 @@ let package = Package(
             exclude: ["CMakeLists.txt"]
         ),
         .testTarget(
+            name: "CacaoSettingsTests",
+            dependencies: [
+                "CacaoSettings",
+                "CacaoShellKit",
+                .product(
+                    name: "DBus",
+                    package: "DBus"
+                )
+            ]
+        ),
+        .testTarget(
             name: "CacaoShellKitTests",
             dependencies: [
                 "CacaoShellKit",
