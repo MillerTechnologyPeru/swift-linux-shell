@@ -4,6 +4,7 @@ add_subdirectory(CacaoSettings)
 if(CACAO_SHELL_BUILD_APPS)
   add_subdirectory(CacaoMenuBar)
   add_subdirectory(CacaoDock)
+  add_subdirectory(CacaoDesktop)
 endif()
 
 if(CACAO_SHELL_BUILD_COMPOSITOR)
