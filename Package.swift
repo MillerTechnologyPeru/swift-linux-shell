@@ -95,11 +95,23 @@ let package = Package(
             ],
             exclude: ["CMakeLists.txt"]
         ),
+        // A private dbus-daemon for the tests.
+        .target(
+            name: "ShellTestSupport",
+            dependencies: [
+                .product(
+                    name: "DBus",
+                    package: "DBus"
+                )
+            ],
+            path: "Tests/ShellTestSupport"
+        ),
         .testTarget(
             name: "CacaoSettingsTests",
             dependencies: [
                 "CacaoSettings",
                 "CacaoShellKit",
+                "ShellTestSupport",
                 .product(
                     name: "DBus",
                     package: "DBus"
