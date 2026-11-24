@@ -4,9 +4,9 @@
 //
 //  The dock: launchers from desktop entries, running apps, and the trash.
 //
-//  For now it is an ordinary window listing installed apps. It becomes a
-//  layer-shell surface on the bottom edge once CacaoHost can create one, and
-//  shows running apps once the compositor's window list is read.
+//  It sits in the top layer of the screen, centered on the bottom edge,
+//  and windows stay above it. For now it lists installed apps; it shows
+//  running apps once the compositor's window list is read.
 //
 
 import CacaoSDL
@@ -16,11 +16,24 @@ import Foundation
 @main
 struct CacaoDockApp: App {
 
+    init() {
+        // The Wayland app_id.
+        SDLHost.appIdentifier = "org.pureswift.Cacao.Dock"
+    }
+
     var body: some Scene {
         WindowGroup("Dock") {
             DockView(launchers: Launchers.load())
         }
-        .defaultSize(width: 720, height: 84)
+        // Anchored to the bottom edge alone, so centered along it.
+        .defaultSize(width: 720, height: DockView.height)
+        .windowLayer(
+            .top,
+            edges: .bottom,
+            exclusiveZone: DockView.height,
+            keyboardInteractivity: .none,
+            namespace: "cacao-dock"
+        )
     }
 }
 
@@ -53,6 +66,8 @@ enum Launchers {
 }
 
 struct DockView: View {
+
+    static let height: CGFloat = 84
 
     let launchers: [DesktopEntry]
 
