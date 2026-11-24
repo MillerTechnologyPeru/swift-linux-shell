@@ -45,20 +45,27 @@ struct MenuBarView: View {
     @ObservedObject var appMenus = AppMenus.shared
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 8) {
             Image(systemName: "circle.grid.2x2")
-            // The app menu, in bold: the app's own when it serves one, else
-            // its name, or the desktop's with no window focused.
-            if let appMenu = appMenus.appMenu {
-                MenuTitle(menu: appMenu, isAppMenu: true)
-            } else {
-                Text(appMenus.appName ?? "Desktop")
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
+            HStack(spacing: 0) {
+                // The app menu, in bold: the app's own when it serves one,
+                // else the default one, or the desktop's with no window
+                // focused.
+                if let appMenu = appMenus.appMenu {
+                    BarMenu(menu: appMenu, isAppMenu: true)
+                } else if let appName = appMenus.appName {
+                    DefaultAppMenu(appName: appName)
+                } else {
+                    Text("Desktop")
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                }
+                ForEach(appMenus.otherMenus) { menu in
+                    BarMenu(menu: menu, isAppMenu: false)
+                }
             }
-            ForEach(appMenus.otherMenus) { menu in
-                MenuTitle(menu: menu, isAppMenu: false)
-            }
+            .menuStyle(.borderlessButton)
             Spacer()
             StatusArea()
         }
@@ -68,18 +75,103 @@ struct MenuBarView: View {
     }
 }
 
-/// A menu's title in the bar.
-struct MenuTitle: View {
+/// One of the app's menus in the bar. It opens below the bar as a popup.
+struct BarMenu: View {
 
     let menu: DBusMenuItem
 
     let isAppMenu: Bool
 
     var body: some View {
-        Text(menu.title)
-            .fontWeight(isAppMenu ? .semibold : .regular)
-            .lineLimit(1)
-            .opacity(menu.isEnabled ? 1 : 0.5)
+        Menu {
+            MenuItems(menu: menu)
+        } label: {
+            Text(menu.title)
+                .fontWeight(isAppMenu ? .semibold : .regular)
+                .lineLimit(1)
+        }
+        .disabled(!menu.isEnabled)
+    }
+}
+
+/// A menu's items: buttons, submenus and separators. Its content exists
+/// only while the menu is open, so appearing tells the app it opened.
+struct MenuItems: View {
+
+    let menu: DBusMenuItem
+
+    var body: some View {
+        ForEach(menu.children.filter(\.isVisible)) { item in
+            if item.type == .separator {
+                Divider()
+            } else if item.isSubmenu {
+                Menu {
+                    MenuItems(menu: item)
+                } label: {
+                    MenuItemLabel(item: item)
+                }
+                .disabled(!item.isEnabled)
+            } else {
+                Button {
+                    AppMenus.shared.click(item)
+                } label: {
+                    MenuItemLabel(item: item)
+                }
+                .disabled(!item.isEnabled)
+            }
+        }
+        .onAppear { AppMenus.shared.willOpen(menu) }
+        .onDisappear { AppMenus.shared.didClose(menu) }
+    }
+}
+
+/// An item's title, with its checkmark or radio mark and its shortcut.
+struct MenuItemLabel: View {
+
+    let item: DBusMenuItem
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if item.toggleType != nil {
+                Text(mark)
+                    .frame(width: 12)
+            }
+            Text(item.title)
+                .lineLimit(1)
+            Spacer(minLength: 16)
+            if let shortcut = item.shortcut {
+                Text(shortcut.glyphs)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var mark: String {
+        switch (item.toggleType, item.toggleState) {
+        case (.checkmark?, .on): return "✓"
+        case (.radio?, .on): return "•"
+        case (_, .indeterminate): return "–"
+        default: return ""
+        }
+    }
+}
+
+/// The app menu for an app that serves no menu of its own, as the plan
+/// has it: built from its desktop entry's name.
+struct DefaultAppMenu: View {
+
+    let appName: String
+
+    var body: some View {
+        Menu {
+            Button("Quit \(appName)") {
+                FocusedApp.shared.closeFocusedApp()
+            }
+        } label: {
+            Text(appName)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+        }
     }
 }
 
