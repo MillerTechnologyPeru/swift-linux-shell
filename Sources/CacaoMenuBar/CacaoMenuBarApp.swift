@@ -6,10 +6,11 @@
 //  items and the clock at the right.
 //
 //  It sits in the top layer of the screen along the top edge, and windows
-//  stay below it. It reads menus once the compositor reports the focused
-//  window's dbusmenu address.
+//  stay below it. It shows the focused app's name and its menus, read over
+//  com.canonical.dbusmenu.
 //
 
+import CacaoDBusMenu
 import CacaoSDL
 import CacaoShellKit
 import Foundation
@@ -41,17 +42,22 @@ struct MenuBarView: View {
 
     static let height: CGFloat = 28
 
-    /// Shown until the focused app's menus can be read: the default app
-    /// menu every app gets.
-    let menuTitles = ["File", "Edit", "View", "Window", "Help"]
+    @ObservedObject var appMenus = AppMenus.shared
 
     var body: some View {
         HStack(spacing: 16) {
             Image(systemName: "circle.grid.2x2")
-            Text("Desktop")
-                .fontWeight(.semibold)
-            ForEach(menuTitles, id: \.self) { title in
-                Text(title)
+            // The app menu, in bold: the app's own when it serves one, else
+            // its name, or the desktop's with no window focused.
+            if let appMenu = appMenus.appMenu {
+                MenuTitle(menu: appMenu, isAppMenu: true)
+            } else {
+                Text(appMenus.appName ?? "Desktop")
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+            }
+            ForEach(appMenus.otherMenus) { menu in
+                MenuTitle(menu: menu, isAppMenu: false)
             }
             Spacer()
             StatusArea()
@@ -59,6 +65,21 @@ struct MenuBarView: View {
         .font(.system(size: 13))
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height)
+    }
+}
+
+/// A menu's title in the bar.
+struct MenuTitle: View {
+
+    let menu: DBusMenuItem
+
+    let isAppMenu: Bool
+
+    var body: some View {
+        Text(menu.title)
+            .fontWeight(isAppMenu ? .semibold : .regular)
+            .lineLimit(1)
+            .opacity(menu.isEnabled ? 1 : 0.5)
     }
 }
 
