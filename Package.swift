@@ -122,6 +122,7 @@ let package = Package(
             name: "CacaoShellKitTests",
             dependencies: [
                 "CacaoShellKit",
+                "ShellTestSupport",
                 .product(
                     name: "DBus",
                     package: "DBus"
