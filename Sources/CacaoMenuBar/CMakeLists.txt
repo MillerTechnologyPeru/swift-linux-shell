@@ -7,4 +7,5 @@ cacao_shell_add_executable(CacaoMenuBar PARSE_AS_LIBRARY ${sources})
 target_link_libraries(CacaoMenuBar PRIVATE
   CacaoShellKit
   Cacao
-  CacaoSDL)
+  CacaoSDL
+  DBus)
