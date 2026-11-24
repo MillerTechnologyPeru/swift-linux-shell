@@ -15,6 +15,13 @@ public enum ShellDBus {
     /// An app's menus, read by the menu bar.
     public static let dbusMenuInterface = DBusInterface(rawValue: "com.canonical.dbusmenu")!
 
+    /// The registry of X11 windows' menus. The menu bar owns it, because
+    /// apps such as Qt's and Perry's take an owner as the sign that a global
+    /// menu bar shows their menus, and hide their own.
+    public static let appMenuRegistrarName = DBusBusName(rawValue: "com.canonical.AppMenu.Registrar")!
+    public static let appMenuRegistrarInterface = DBusInterface(rawValue: "com.canonical.AppMenu.Registrar")!
+    public static let appMenuRegistrarPath = DBusObjectPath(rawValue: "/com/canonical/AppMenu/Registrar")!
+
     // MARK: Status items
 
     /// The watcher the menu bar hosts, which status items register with.
