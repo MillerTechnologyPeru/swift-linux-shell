@@ -21,6 +21,14 @@ SCANNER=$(pkg-config --variable=wayland_scanner wayland-scanner)
 "$SCANNER" server-header "$WAYLAND_PROTOCOLS/stable/xdg-shell/xdg-shell.xml" "$OUT/include/xdg-shell-protocol.h"
 "$SCANNER" server-header "$ROOT/Protocols/ThirdParty/wlr-layer-shell-unstable-v1.xml" "$OUT/include/wlr-layer-shell-unstable-v1-protocol.h"
 
+# The dock's own client of the window list, in its C target. libwlroots
+# defines these interfaces too, so they stay out of CShellProtocols, which
+# the compositor links.
+TOPLEVELS="$ROOT/Sources/CToplevelList/protocol"
+mkdir -p "$TOPLEVELS"
+"$SCANNER" client-header "$ROOT/Protocols/ThirdParty/wlr-foreign-toplevel-management-unstable-v1.xml" "$TOPLEVELS/wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
+"$SCANNER" private-code "$ROOT/Protocols/ThirdParty/wlr-foreign-toplevel-management-unstable-v1.xml" "$TOPLEVELS/wlr-foreign-toplevel-management-unstable-v1-protocol.c"
+
 # Interface code, and both headers.
 for xml in "$ROOT/Protocols/ThirdParty/appmenu.xml" "$ROOT/Protocols/cacao-dock-unstable-v1.xml"; do
     name=$(basename "$xml" .xml)
