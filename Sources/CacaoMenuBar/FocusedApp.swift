@@ -72,6 +72,17 @@ final class FocusedApp {
         #endif
     }
 
+    /// Asks every window of the focused app to close: the default app
+    /// menu's Quit, for apps that serve no menu of their own.
+    func closeFocusedApp() {
+        #if os(Linux)
+        guard let client, let appID else { return }
+        for (id, window) in windows where window.appID == appID {
+            ctl_client_close(client, id)
+        }
+        #endif
+    }
+
     #if os(Linux)
     private func poll() {
         guard let client else { return }
@@ -85,7 +96,17 @@ final class FocusedApp {
     }
 
     private func update() {
-        let focused = windows.values.first(where: \.isActivated)?.appID
+        let focused: String?
+        if let activated = windows.values.first(where: \.isActivated) {
+            focused = activated.appID
+        } else if let appID, windows.values.contains(where: { $0.appID == appID }) {
+            // Focus went to no window: to the menu bar itself, when one of
+            // its menus is clicked, or to the desktop. The app keeps the
+            // bar while it has a window open.
+            focused = appID
+        } else {
+            focused = nil
+        }
         if focused != appID {
             appID = focused
             onChange?(focused)

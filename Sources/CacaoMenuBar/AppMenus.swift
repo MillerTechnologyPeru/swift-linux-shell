@@ -20,9 +20,8 @@ import Foundation
 /// The menu bar also owns `com.canonical.AppMenu.Registrar`, which apps
 /// check to know a global menu bar shows their menus.
 ///
-/// The menus' titles are shown, but they don't open yet: Cacao draws
-/// popups inside their window, and the bar is too short for them. Choosing
-/// items comes once Cacao can open a popup as a surface of its own.
+/// The bar opens each menu with Cacao's `Menu`, as a popup surface of its
+/// layer surface; choosing an item sends the app a click.
 @MainActor
 final class AppMenus: ObservableObject {
 
@@ -64,6 +63,36 @@ final class AppMenus: ObservableObject {
 
     private init() {
         Task { await connect() }
+    }
+
+    // MARK: Menus
+
+    /// Sends the app a click on an item, as when it's chosen from a menu.
+    func click(_ item: DBusMenuItem) {
+        guard let reader else { return }
+        Task {
+            do {
+                try await reader.click(item.id)
+            } catch {
+                print("[CacaoMenuBar] \(item.title) wasn't chosen: \(error)")
+            }
+        }
+    }
+
+    /// Tells the app a menu is opening, so it can bring its items up to
+    /// date; changes arrive through the reader and update the open menu.
+    func willOpen(_ menu: DBusMenuItem) {
+        guard let reader else { return }
+        Task {
+            _ = try? await reader.aboutToShow(menu.id)
+            try? await reader.opened(menu.id)
+        }
+    }
+
+    /// Tells the app a menu closed.
+    func didClose(_ menu: DBusMenuItem) {
+        guard let reader else { return }
+        Task { try? await reader.closed(menu.id) }
     }
 
     // MARK: Following focus
