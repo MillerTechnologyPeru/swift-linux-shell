@@ -77,8 +77,22 @@ let package = Package(
                     package: "Cacao"
                 ),
                 .product(
+                    name: "CacaoDBusMenu",
+                    package: "Cacao"
+                ),
+                .product(
                     name: "DBus",
                     package: "DBus"
+                ),
+                // The focused window, from the compositor's window list.
+                .target(
+                    name: "CToplevelList",
+                    condition: .when(platforms: [.linux])
+                ),
+                .product(
+                    name: "CacaoHost",
+                    package: "Cacao",
+                    condition: .when(platforms: [.linux])
                 )
             ],
             exclude: ["CMakeLists.txt"]
