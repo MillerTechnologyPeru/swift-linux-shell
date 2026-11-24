@@ -16,6 +16,9 @@ import Foundation
 @main
 struct CacaoDockApp: App {
 
+    /// Read once, since the dock's width depends on how many there are.
+    let launchers = Launchers.load()
+
     init() {
         // The Wayland app_id.
         SDLHost.appIdentifier = "org.pureswift.Cacao.Dock"
@@ -23,10 +26,11 @@ struct CacaoDockApp: App {
 
     var body: some Scene {
         WindowGroup("Dock") {
-            DockView(launchers: Launchers.load())
+            DockView(launchers: launchers)
         }
-        // Anchored to the bottom edge alone, so centered along it.
-        .defaultSize(width: 720, height: DockView.height)
+        // Anchored to the bottom edge alone, so centered along it, and as
+        // wide as its icons.
+        .defaultSize(width: DockView.width(launcherCount: launchers.count), height: DockView.height)
         .windowLayer(
             .top,
             edges: .bottom,
@@ -69,18 +73,31 @@ struct DockView: View {
 
     static let height: CGFloat = 84
 
+    static let spacing: CGFloat = 8
+
+    static let padding: CGFloat = 8
+
+    static let dividerWidth: CGFloat = 1
+
+    /// The width that fits the launchers, the divider and the trash.
+    static func width(launcherCount: Int) -> CGFloat {
+        let icons = CGFloat(launcherCount + 1)
+        let gaps = icons // between the icons, and either side of the divider
+        return padding * 2 + icons * LauncherIcon.width + dividerWidth + gaps * spacing
+    }
+
     let launchers: [DesktopEntry]
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Self.spacing) {
             ForEach(launchers, id: \.id) { entry in
                 LauncherButton(entry: entry)
             }
             Divider()
-                .frame(height: 48)
+                .frame(width: Self.dividerWidth, height: 48)
             LauncherIcon(systemName: "trash", title: "Trash")
         }
-        .padding(8)
+        .padding(Self.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -103,6 +120,9 @@ struct LauncherButton: View {
 
 struct LauncherIcon: View {
 
+    /// Every icon's width, so the dock's width can be worked out.
+    static let width: CGFloat = 56
+
     let systemName: String
 
     let title: String
@@ -115,7 +135,7 @@ struct LauncherIcon: View {
             Text(title)
                 .font(.system(size: 9))
                 .lineLimit(1)
-                .frame(maxWidth: 56)
         }
+        .frame(width: Self.width)
     }
 }
