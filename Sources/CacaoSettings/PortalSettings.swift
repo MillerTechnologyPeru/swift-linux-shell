@@ -13,6 +13,34 @@ struct PortalSettings {
 
     let store: SettingsStore
 
+    /// Emitted for each key that changes, with its new value.
+    static let settingChanged = DBusMessage.Signal(
+        path: ShellDBus.portalPath,
+        interface: ShellDBus.portalSettingsBackendInterface,
+        name: DBusMember(rawValue: "SettingChanged")!
+    )
+
+    /// Serves both objects on a connection. Changes made through the shell's
+    /// interface are emitted as `SettingChanged`.
+    func export(on connection: DBusConnection) async {
+        await connection.export(DBusExportedObject([portalBackend()]), at: ShellDBus.portalPath)
+        let shell = shellInterface { changes in
+            for change in changes {
+                log("\(change.namespace) \(change.key) changed")
+                do {
+                    try await connection.emit(Self.settingChanged, arguments: [
+                        .string(change.namespace),
+                        .string(change.key),
+                        change.value.variant,
+                    ])
+                } catch {
+                    log("Could not emit SettingChanged: \(error)")
+                }
+            }
+        }
+        await connection.export(DBusExportedObject([shell]), at: ShellDBus.settingsPath)
+    }
+
     /// `org.freedesktop.impl.portal.Settings`, version 2.
     func portalBackend() -> DBusInterfaceImplementation {
         let store = self.store
