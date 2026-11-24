@@ -69,6 +69,10 @@ let package = Package(
                 .product(
                     name: "CacaoSDL",
                     package: "Cacao"
+                ),
+                .product(
+                    name: "DBus",
+                    package: "DBus"
                 )
             ],
             exclude: ["CMakeLists.txt"]
