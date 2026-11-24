@@ -23,5 +23,6 @@ exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DE
 
 # The shell
 exec CacaoSettings
+exec CacaoDesktop
 exec CacaoMenuBar
 exec CacaoDock
