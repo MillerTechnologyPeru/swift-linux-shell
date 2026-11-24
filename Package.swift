@@ -11,6 +11,7 @@ import PackageDescription
 ///   modes.
 /// - `CacaoDock`: the dock, the app grid and launcher entries.
 /// - `CacaoSettings`: the settings daemon and portal backend.
+/// - `CacaoDesktop`: the wallpaper, until the file manager owns the desktop.
 /// - `CacaoShellKit`: what the four share: form factor, desktop entries,
 ///   D-Bus names and settings, and the Swift side of the dock protocol.
 /// - `CWLRoots`: the C shim over wlroots, with the protocol handlers.
@@ -39,6 +40,10 @@ let package = Package(
         .executable(
             name: "CacaoSettings",
             targets: ["CacaoSettings"]
+        ),
+        .executable(
+            name: "CacaoDesktop",
+            targets: ["CacaoDesktop"]
         )
     ] + compositorProducts,
     dependencies: [
@@ -77,6 +82,16 @@ let package = Package(
             name: "CacaoDock",
             dependencies: [
                 "CacaoShellKit",
+                .product(
+                    name: "CacaoSDL",
+                    package: "Cacao"
+                )
+            ],
+            exclude: ["CMakeLists.txt"]
+        ),
+        .executableTarget(
+            name: "CacaoDesktop",
+            dependencies: [
                 .product(
                     name: "CacaoSDL",
                     package: "Cacao"
