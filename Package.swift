@@ -70,6 +70,10 @@ let package = Package(
                 .product(
                     name: "CacaoSDL",
                     package: "Cacao"
+                ),
+                .product(
+                    name: "DBus",
+                    package: "DBus"
                 )
             ],
             exclude: ["CMakeLists.txt"]
@@ -115,11 +119,23 @@ let package = Package(
             ],
             exclude: ["CMakeLists.txt"]
         ),
+        // A private dbus-daemon for the tests.
+        .target(
+            name: "ShellTestSupport",
+            dependencies: [
+                .product(
+                    name: "DBus",
+                    package: "DBus"
+                )
+            ],
+            path: "Tests/ShellTestSupport"
+        ),
         .testTarget(
             name: "CacaoSettingsTests",
             dependencies: [
                 "CacaoSettings",
                 "CacaoShellKit",
+                "ShellTestSupport",
                 .product(
                     name: "DBus",
                     package: "DBus"
@@ -130,6 +146,7 @@ let package = Package(
             name: "CacaoShellKitTests",
             dependencies: [
                 "CacaoShellKit",
+                "ShellTestSupport",
                 .product(
                     name: "DBus",
                     package: "DBus"

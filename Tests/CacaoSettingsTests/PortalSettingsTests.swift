@@ -10,6 +10,7 @@
 import CacaoShellKit
 import DBus
 import Foundation
+import ShellTestSupport
 import Testing
 @testable import CacaoSettings
 

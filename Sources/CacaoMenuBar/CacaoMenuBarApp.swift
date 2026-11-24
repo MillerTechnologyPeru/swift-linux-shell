@@ -2,8 +2,8 @@
 //  CacaoMenuBarApp.swift
 //  CacaoMenuBar
 //
-//  The menu bar: the focused app's menus at the left, status items and the
-//  clock at the right.
+//  The menu bar: the focused app's menus at the left, other apps' status
+//  items and the clock at the right.
 //
 //  It sits in the top layer of the screen along the top edge, and windows
 //  stay below it. It reads menus once the compositor reports the focused
@@ -11,6 +11,7 @@
 //
 
 import CacaoSDL
+import CacaoShellKit
 import Foundation
 
 @main
@@ -64,8 +65,13 @@ struct MenuBarView: View {
 /// The right side: status items, then the built-in views.
 struct StatusArea: View {
 
+    @ObservedObject var statusItems = StatusItems.shared
+
     var body: some View {
         HStack(spacing: 14) {
+            ForEach(statusItems.items) { item in
+                StatusItemButton(item: item)
+            }
             Image(systemName: "wifi")
             Image(systemName: "speaker.wave.2")
             Clock()
@@ -87,4 +93,28 @@ struct Clock: View {
         formatter.setLocalizedDateFormatFromTemplate("EEE MMM d h:mm a")
         return formatter
     }()
+}
+
+/// Another app's status item. Until Cacao can look up icon theme names, it
+/// shows the item's name; a click activates it.
+struct StatusItemButton: View {
+
+    let item: StatusItem
+
+    var body: some View {
+        Button {
+            StatusItems.shared.activate(item)
+        } label: {
+            HStack(spacing: 4) {
+                if item.status == .needsAttention {
+                    Image(systemName: "exclamationmark.circle.fill")
+                }
+                Text(item.displayName)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: 120)
+        }
+        .buttonStyle(.plain)
+        .help(item.toolTip ?? item.displayName)
+    }
 }

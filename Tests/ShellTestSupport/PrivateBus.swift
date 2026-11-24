@@ -1,6 +1,6 @@
 //
 //  PrivateBus.swift
-//  CacaoSettingsTests
+//  ShellTestSupport
 //
 
 import DBus
@@ -17,27 +17,27 @@ import Darwin
 /// - Note: Spawned with `posix_spawn`, as in PureSwift/DBus's own tests:
 /// Foundation's `Process` only offers blocking ways to watch the child, and
 /// blocking a cooperative thread from an async test deadlocks the run.
-final class PrivateBus {
+public final class PrivateBus {
 
     /// Where `dbus-daemon` lives, or `nil` if it isn't installed.
-    static let executablePath: String? = [
+    public static let executablePath: String? = [
         "/usr/bin/dbus-daemon",
         "/opt/homebrew/bin/dbus-daemon",
         "/usr/local/bin/dbus-daemon",
     ].first { FileManager.default.isExecutableFile(atPath: $0) }
 
-    static var isAvailable: Bool {
+    public static var isAvailable: Bool {
         executablePath != nil
     }
 
-    let address: String
+    public let address: String
 
     private let directory: URL
 
     private let processID: pid_t
 
     /// Starts a bus and waits until it accepts connections.
-    static func start() async throws -> PrivateBus {
+    public static func start() async throws -> PrivateBus {
         let bus = try PrivateBus()
         for _ in 0 ..< 50 {
             if let connection = try? await DBusConnection.connect(to: bus.address) {
@@ -84,7 +84,7 @@ final class PrivateBus {
         processID = pid
     }
 
-    func stop() {
+    public func stop() {
         // SIGKILL, because the daemon inherits the test runner's ignored
         // signals and stays alive after SIGTERM.
         kill(processID, SIGKILL)
@@ -118,7 +118,7 @@ final class PrivateBus {
     }
 }
 
-enum PrivateBusError: Error {
+public enum PrivateBusError: Error {
     case notInstalled
     case notStarted
     case notReady
