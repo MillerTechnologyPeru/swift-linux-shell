@@ -5,10 +5,9 @@
 //  The menu bar: the focused app's menus at the left, status items and the
 //  clock at the right.
 //
-//  For now it is an ordinary window. It becomes a layer-shell surface on the
-//  top edge, with an exclusive zone, once CacaoHost can create one, and it
-//  reads menus once the compositor reports the focused window's dbusmenu
-//  address.
+//  It sits in the top layer of the screen along the top edge, and windows
+//  stay below it. It reads menus once the compositor reports the focused
+//  window's dbusmenu address.
 //
 
 import CacaoSDL
@@ -17,15 +16,29 @@ import Foundation
 @main
 struct CacaoMenuBarApp: App {
 
+    init() {
+        // The Wayland app_id.
+        SDLHost.appIdentifier = "org.pureswift.Cacao.MenuBar"
+    }
+
     var body: some Scene {
         WindowGroup("Menu Bar") {
             MenuBarView()
         }
-        .defaultSize(width: 1280, height: 28)
+        // The width is the screen's, from the anchors.
+        .defaultSize(width: 1280, height: MenuBarView.height)
+        .windowLayer(
+            .top,
+            edges: [.top, .leading, .trailing],
+            exclusiveZone: MenuBarView.height,
+            namespace: "cacao-menu-bar"
+        )
     }
 }
 
 struct MenuBarView: View {
+
+    static let height: CGFloat = 28
 
     /// Shown until the focused app's menus can be read: the default app
     /// menu every app gets.
@@ -44,7 +57,7 @@ struct MenuBarView: View {
         }
         .font(.system(size: 13))
         .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28)
+        .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height)
     }
 }
 
