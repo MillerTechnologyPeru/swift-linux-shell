@@ -10,7 +10,7 @@ import Foundation
 /// `$XDG_CONFIG_HOME/cacao/settings.json`.
 actor SettingsStore {
 
-    let fileURL: URL
+    nonisolated let fileURL: URL
 
     private(set) var settings: AppearanceSettings
 
