@@ -12,6 +12,7 @@ add_library(CWLRoots STATIC
   layer.c
   protocols.c
   server.c
+  shadow.c
   titlebar.c
   toplevel.c)
 
@@ -29,4 +30,6 @@ target_link_libraries(CWLRoots PRIVATE
   CShellProtocols
   PkgConfig::WLROOTS
   PkgConfig::WAYLAND_SERVER
-  PkgConfig::XKBCOMMON)
+  PkgConfig::XKBCOMMON
+  # The shadow's falloff.
+  m)

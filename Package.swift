@@ -235,7 +235,9 @@ var compositorTargets: [Target] {
             ],
             linkerSettings: [
                 .linkedLibrary("wayland-server"),
-                .linkedLibrary("xkbcommon")
+                .linkedLibrary("xkbcommon"),
+                // The shadow's falloff.
+                .linkedLibrary("m")
             ]
         ),
         // wlroots' include and library paths, from pkg-config.

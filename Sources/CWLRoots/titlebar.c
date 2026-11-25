@@ -56,7 +56,7 @@ static const struct wlr_buffer_impl pixel_buffer_impl = {
     .end_data_ptr_access = pixel_buffer_end_data_ptr_access,
 };
 
-static struct wlr_buffer *pixel_buffer_create(const void *pixels, int32_t width, int32_t height, int32_t bytes_per_row) {
+struct wlr_buffer *cwl_pixel_buffer_create(const void *pixels, int32_t width, int32_t height, int32_t bytes_per_row) {
     struct cwl_pixel_buffer *buffer = calloc(1, sizeof(*buffer));
     if (!buffer) {
         return NULL;
@@ -93,6 +93,8 @@ void cwl_toplevel_layout_frame(CWLToplevel *toplevel) {
         wlr_scene_node_set_position(&toplevel->title_bar->node, geometry.x, geometry.y);
     }
     wlr_scene_node_set_position(&toplevel->content_tree->node, 0, bar);
+    // The shadow follows the frame's height.
+    cwl_toplevel_update_shadow(toplevel);
 }
 
 bool cwl_toplevel_wants_title_bar(CWLToplevel *toplevel) {
@@ -110,7 +112,7 @@ void cwl_toplevel_set_title_bar(CWLToplevel *toplevel, const void *pixels, int32
         }
         return;
     }
-    struct wlr_buffer *buffer = pixel_buffer_create(pixels, width, height, bytes_per_row);
+    struct wlr_buffer *buffer = cwl_pixel_buffer_create(pixels, width, height, bytes_per_row);
     if (!buffer) {
         return;
     }

@@ -97,6 +97,10 @@ struct CWLServer {
     /// The window whose title bar the left button went down on, until it
     /// comes up.
     CWLToplevel *title_bar_pressed;
+    /// Whether windows have shadows: the desktop's effects setting.
+    bool effects;
+    /// The one shadow image every window's shadow is cut from.
+    struct wlr_buffer *shadow_image;
     /// The window that's activated, which has the keyboard unless a layer
     /// surface took it.
     CWLToplevel *focused_toplevel;
@@ -153,6 +157,10 @@ struct CWLToplevel {
     struct wlr_scene_tree *scene_tree;
     /// The xdg surface and its subsurfaces and popups, below the title bar.
     struct wlr_scene_tree *content_tree;
+    /// The window's shadow, below the rest of its frame, and its nine pieces
+    /// once it's been shown.
+    struct wlr_scene_tree *shadow;
+    struct wlr_scene_buffer *shadow_pieces[9];
     /// The title bar the compositor draws, or NULL.
     struct wlr_scene_buffer *title_bar;
     int title_bar_height;
@@ -240,9 +248,20 @@ void cwl_popup_create(CWLServer *server, struct wlr_xdg_popup *xdg_popup, struct
 
 // MARK: titlebar.c
 
+/// A buffer of premultiplied RGBA pixels, copied, for the scene to show.
+struct wlr_buffer *cwl_pixel_buffer_create(const void *pixels, int32_t width, int32_t height, int32_t bytes_per_row);
+
 /// Where the window's visible content starts in its frame: below the title
 /// bar, if it has one.
 void cwl_toplevel_content_offset(CWLToplevel *toplevel, int *x, int *y);
+
+// MARK: shadow.c
+
+/// Adds the window's shadow tree, below the rest of its frame.
+void cwl_toplevel_create_shadow(CWLToplevel *toplevel);
+
+/// Shows the shadow around the window's frame, or hides it.
+void cwl_toplevel_update_shadow(CWLToplevel *toplevel);
 
 /// Places the title bar and the content in the window's frame.
 void cwl_toplevel_layout_frame(CWLToplevel *toplevel);

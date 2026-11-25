@@ -117,6 +117,7 @@ static void toplevel_map(struct wl_listener *listener, void *data) {
         server->callbacks.toplevel_mapped(server->callbacks.context, toplevel);
     }
     cwl_toplevel_title_bar_changed(toplevel);
+    cwl_toplevel_update_shadow(toplevel);
 }
 
 static void toplevel_unmap(struct wl_listener *listener, void *data) {
@@ -133,6 +134,7 @@ static void toplevel_unmap(struct wl_listener *listener, void *data) {
         server->focused_toplevel = NULL;
     }
     handle_destroy(toplevel);
+    cwl_toplevel_update_shadow(toplevel);
     if (server->callbacks.toplevel_unmapped) {
         server->callbacks.toplevel_unmapped(server->callbacks.context, toplevel);
     }
@@ -168,6 +170,8 @@ static void toplevel_commit(struct wl_listener *listener, void *data) {
         toplevel->content_height = geometry.height;
         cwl_toplevel_title_bar_changed(toplevel);
     }
+    // Its size, or its maximized and fullscreen states, may have changed.
+    cwl_toplevel_update_shadow(toplevel);
 }
 
 static void toplevel_changed(CWLToplevel *toplevel) {
@@ -300,6 +304,7 @@ void cwl_handle_new_toplevel(struct wl_listener *listener, void *data) {
     // compositor draws one.
     toplevel->scene_tree = wlr_scene_tree_create(server->windows);
     toplevel->scene_tree->node.data = toplevel;
+    cwl_toplevel_create_shadow(toplevel);
     toplevel->content_tree = wlr_scene_xdg_surface_create(toplevel->scene_tree, xdg_toplevel->base);
     // Popups find their parent's scene tree here.
     xdg_toplevel->base->data = toplevel->content_tree;
