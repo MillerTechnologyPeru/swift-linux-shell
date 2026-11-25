@@ -11,11 +11,13 @@ import Foundation
 
 /// The focused app's menus, read from its `com.canonical.dbusmenu` object.
 ///
-/// Until the compositor reports each window's menu address, an app's menu
-/// is found by its `app_id`, at the bus name Cacao's `AppMenuDiscovery`
-/// documents (`org.pureswift.Cacao.AppMenu.<escaped app_id>`, path
-/// `/MenuBar`), which Cacao apps and Perry own. Apps that serve no menu
-/// get the default app menu.
+/// Under CacaoWindowServer, the compositor says where the focused window's
+/// menu is, from the appmenu protocol. Otherwise, or when the window exports
+/// no address, an app's menu is found by its `app_id`, at the bus name
+/// Cacao's `AppMenuDiscovery` documents
+/// (`org.pureswift.Cacao.AppMenu.<escaped app_id>`, path `/MenuBar`), which
+/// Cacao apps and Perry own. Apps that serve no menu get the default app
+/// menu.
 ///
 /// The menu bar also owns `com.canonical.AppMenu.Registrar`, which apps
 /// check to know a global menu bar shows their menus.
@@ -57,6 +59,9 @@ final class AppMenus: ObservableObject {
 
     /// Follows the focused app's menu, replaced when focus moves.
     private var following: Task<Void, Never>?
+
+    /// Where the focused window's menu is, when the compositor says.
+    private var menuAddress: FocusedWindow.Menu?
 
     /// Every installed app, for naming the focused one.
     private let installed = DesktopEntry.installed()
@@ -124,10 +129,13 @@ final class AppMenus: ObservableObject {
             print("[CacaoMenuBar] Apps' menus aren't available: \(error)")
         }
         let focused = FocusedApp.shared
-        focused.onChange = { [weak self] appID in
-            self?.focusChanged(to: appID)
+        if let connection {
+            await focused.useWindowServer(on: connection)
         }
-        focusChanged(to: focused.appID)
+        focused.onChange = { [weak self] in
+            self?.focusChanged(to: focused.appID, menu: focused.menu)
+        }
+        focusChanged(to: focused.appID, menu: focused.menu)
     }
 
     private func menuNameChanged(appID: String) {
@@ -135,9 +143,10 @@ final class AppMenus: ObservableObject {
         follow(appID)
     }
 
-    private func focusChanged(to appID: String?) {
-        guard appID != self.appID else { return }
+    private func focusChanged(to appID: String?, menu: FocusedWindow.Menu?) {
+        guard appID != self.appID || menu != menuAddress else { return }
         self.appID = appID
+        menuAddress = menu
         appName = appID.map(name(of:))
         follow(appID)
     }
@@ -149,8 +158,14 @@ final class AppMenus: ObservableObject {
         menus = []
         Task { await previous?.stop() }
         guard let appID, let connection else { return }
+        let address = menuAddress
         following = Task { [weak self] in
-            guard let reader = await AppMenuDiscovery.reader(forAppID: appID, on: connection) else {
+            let reader: DBusMenuReader
+            if let address {
+                reader = DBusMenuReader(connection: connection, service: address.service, path: address.path)
+            } else if let found = await AppMenuDiscovery.reader(forAppID: appID, on: connection) {
+                reader = found
+            } else {
                 return
             }
             do {
