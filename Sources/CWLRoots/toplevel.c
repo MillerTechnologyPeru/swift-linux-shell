@@ -134,6 +134,7 @@ static void toplevel_unmap(struct wl_listener *listener, void *data) {
         server->focused_toplevel = NULL;
     }
     cwl_toplevel_finish_animation(toplevel);
+    cwl_toplevel_drop_preview(toplevel, true);
     handle_destroy(toplevel);
     cwl_toplevel_update_shadow(toplevel);
     if (server->callbacks.toplevel_unmapped) {
@@ -174,6 +175,7 @@ static void toplevel_commit(struct wl_listener *listener, void *data) {
     // Its size, or its maximized and fullscreen states, may have changed.
     cwl_toplevel_update_shadow(toplevel);
     cwl_toplevel_animation_committed(toplevel);
+    cwl_toplevel_preview_committed(toplevel);
 }
 
 static void toplevel_changed(CWLToplevel *toplevel) {
@@ -276,6 +278,7 @@ static void toplevel_destroy(struct wl_listener *listener, void *data) {
         server->focused_toplevel = NULL;
     }
     cwl_toplevel_cancel_animation(toplevel);
+    cwl_toplevel_drop_preview(toplevel, false);
     handle_destroy(toplevel);
     if (server->callbacks.toplevel_destroyed) {
         server->callbacks.toplevel_destroyed(server->callbacks.context, toplevel);
