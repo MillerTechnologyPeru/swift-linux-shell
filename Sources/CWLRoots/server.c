@@ -85,6 +85,18 @@ static void server_new_output(struct wl_listener *listener, void *data) {
     struct wlr_scene_output *scene_output = wlr_scene_output_create(server->scene, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_layout, layout_output, scene_output);
 
+    // Show the cursor from the start, before the pointer first moves: an
+    // output shows it only once it has moved, so warp it, to the middle of
+    // the first screen.
+    wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+    if (wl_list_length(&server->outputs) == 1) {
+        struct wlr_box box;
+        wlr_output_layout_get_box(server->output_layout, wlr_output, &box);
+        wlr_cursor_warp(server->cursor, NULL, box.x + box.width / 2.0, box.y + box.height / 2.0);
+    } else {
+        wlr_cursor_warp(server->cursor, NULL, server->cursor->x, server->cursor->y);
+    }
+
     cwl_output_arrange_layers(output);
 }
 
@@ -114,13 +126,41 @@ static void keyboard_modifiers(struct wl_listener *listener, void *data) {
     wlr_seat_keyboard_notify_modifiers(keyboard->server->seat, &keyboard->wlr_keyboard->modifiers);
 }
 
+/// Whether the compositor takes a pressed key: Control-Alt-F1 to F12
+/// switch VTs, and the policy may take a shortcut with modifiers held.
+static bool handle_key(CWLServer *server, struct wlr_keyboard *wlr_keyboard, uint32_t keycode) {
+    const xkb_keysym_t *syms;
+    // XKB numbers keys 8 higher than evdev.
+    int count = xkb_state_key_get_syms(wlr_keyboard->xkb_state, keycode + 8, &syms);
+    uint32_t modifiers = wlr_keyboard_get_modifiers(wlr_keyboard);
+    for (int i = 0; i < count; i++) {
+        xkb_keysym_t sym = syms[i];
+        if (sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
+            if (server->session) {
+                wlr_session_change_vt(server->session, sym - XKB_KEY_XF86Switch_VT_1 + 1);
+            }
+            return true;
+        }
+        uint32_t held = modifiers & (WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO);
+        if (held && server->callbacks.key_shortcut &&
+            server->callbacks.key_shortcut(server->callbacks.context, (CWLModifiers)modifiers, xkb_keysym_to_lower(sym))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void keyboard_key(struct wl_listener *listener, void *data) {
-    // Shortcuts belong to apps and to the shell processes, so every key goes
-    // to the focused client.
+    // Shortcuts belong to apps and to the shell processes, so every other
+    // key goes to the focused client.
     struct cwl_keyboard *keyboard = wl_container_of(listener, keyboard, key);
     struct wlr_keyboard_key_event *event = data;
-    wlr_seat_set_keyboard(keyboard->server->seat, keyboard->wlr_keyboard);
-    wlr_seat_keyboard_notify_key(keyboard->server->seat, event->time_msec, event->keycode, event->state);
+    CWLServer *server = keyboard->server;
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && handle_key(server, keyboard->wlr_keyboard, event->keycode)) {
+        return;
+    }
+    wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
+    wlr_seat_keyboard_notify_key(server->seat, event->time_msec, event->keycode, event->state);
 }
 
 static void keyboard_destroy(struct wl_listener *listener, void *data) {
@@ -396,7 +436,9 @@ CWLServer *cwl_server_create(CWLServerCallbacks callbacks) {
     wl_list_init(&server->appmenus);
 
     server->display = wl_display_create();
-    server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->display), NULL);
+    // On a VT, wlroots opens a seat session through logind or seatd for the
+    // GPU and input devices.
+    server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->display), &server->session);
     if (!server->backend) {
         wlr_log(WLR_ERROR, "Could not create a wlroots backend");
         goto fail;
