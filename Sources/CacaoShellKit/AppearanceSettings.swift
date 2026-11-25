@@ -32,6 +32,19 @@ public struct AppearanceSettings: Codable, Equatable, Hashable, Sendable {
     /// use the device's default.
     public var formFactors: [String: FormFactor]
 
+    /// Whether the desktop draws its effects: window shadows and
+    /// animations. Off by default on PowerPC, whose GPUs are too slow.
+    public var effects: Bool
+
+    /// Effects' default for this machine.
+    public static var defaultEffects: Bool {
+        #if arch(powerpc) || arch(powerpc64)
+        false
+        #else
+        true
+        #endif
+    }
+
     public init(
         colorScheme: ColorScheme = .noPreference,
         accentColor: AccentColor = .blue,
@@ -42,7 +55,8 @@ public struct AppearanceSettings: Codable, Equatable, Hashable, Sendable {
         iconTheme: String = "elementary",
         cursorTheme: String = "Adwaita",
         cursorSize: Int32 = 24,
-        formFactors: [String: FormFactor] = [:]
+        formFactors: [String: FormFactor] = [:],
+        effects: Bool = AppearanceSettings.defaultEffects
     ) {
         self.colorScheme = colorScheme
         self.accentColor = accentColor
@@ -54,6 +68,25 @@ public struct AppearanceSettings: Codable, Equatable, Hashable, Sendable {
         self.cursorTheme = cursorTheme
         self.cursorSize = cursorSize
         self.formFactors = formFactors
+        self.effects = effects
+    }
+
+    /// Reads saved settings. A key the file doesn't have, as when it was
+    /// saved before the key existed, takes its default.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AppearanceSettings()
+        colorScheme = try container.decodeIfPresent(ColorScheme.self, forKey: .colorScheme) ?? defaults.colorScheme
+        accentColor = try container.decodeIfPresent(AccentColor.self, forKey: .accentColor) ?? defaults.accentColor
+        contrast = try container.decodeIfPresent(Contrast.self, forKey: .contrast) ?? defaults.contrast
+        buttonLayout = try container.decodeIfPresent(String.self, forKey: .buttonLayout) ?? defaults.buttonLayout
+        fontName = try container.decodeIfPresent(String.self, forKey: .fontName) ?? defaults.fontName
+        monospaceFontName = try container.decodeIfPresent(String.self, forKey: .monospaceFontName) ?? defaults.monospaceFontName
+        iconTheme = try container.decodeIfPresent(String.self, forKey: .iconTheme) ?? defaults.iconTheme
+        cursorTheme = try container.decodeIfPresent(String.self, forKey: .cursorTheme) ?? defaults.cursorTheme
+        cursorSize = try container.decodeIfPresent(Int32.self, forKey: .cursorSize) ?? defaults.cursorSize
+        formFactors = try container.decodeIfPresent([String: FormFactor].self, forKey: .formFactors) ?? defaults.formFactors
+        effects = try container.decodeIfPresent(Bool.self, forKey: .effects) ?? defaults.effects
     }
 }
 
@@ -93,6 +126,9 @@ public extension AppearanceSettings {
 
 public extension AppearanceSettings {
 
+    /// The namespace of the desktop's own settings in the portal.
+    static let cacaoNamespace = "org.pureswift.cacao"
+
     /// The namespaces and keys the portal serves, each with its value.
     ///
     /// `org.freedesktop.appearance` is the standard namespace. The
@@ -112,9 +148,15 @@ public extension AppearanceSettings {
                 "icon-theme": .string(iconTheme),
                 "cursor-theme": .string(cursorTheme),
                 "cursor-size": .int32(cursorSize),
+                // GTK's animations follow the desktop's effects.
+                "enable-animations": .bool(effects),
             ],
             "org.gnome.desktop.wm.preferences": [
                 "button-layout": .string(buttonLayout),
+            ],
+            // The desktop's own: effects, which the window server follows.
+            Self.cacaoNamespace: [
+                "effects": .bool(effects),
             ],
         ]
     }
