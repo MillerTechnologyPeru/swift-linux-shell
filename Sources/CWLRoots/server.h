@@ -54,6 +54,9 @@ enum cwl_node_kind {
     CWL_NODE_LAYER_SURFACE = 2
 };
 
+/// How many spaces there are.
+#define CWL_SPACE_COUNT 4
+
 struct CWLServer {
     CWLServerCallbacks callbacks;
 
@@ -86,6 +89,15 @@ struct CWLServer {
     struct wlr_xcursor_manager *cursor_manager;
     struct wl_global *appmenu_global;
     struct wl_global *dock_global;
+    /// Each space's windows and fullscreen windows, in the windows and
+    /// fullscreen layers; only the current space's are shown.
+    struct wlr_scene_tree *space_windows[CWL_SPACE_COUNT];
+    struct wlr_scene_tree *space_fullscreen[CWL_SPACE_COUNT];
+    int current_space;
+    /// A slide from one space to another.
+    struct wl_event_source *slide_timer;
+    int slide_from, slide_width;
+    int64_t slide_start;
     struct wl_list minimize_targets;  // struct cwl_minimize_target.link
     struct wlr_foreign_toplevel_manager_v1 *foreign_toplevels;
 
@@ -164,6 +176,9 @@ struct CWLToplevel {
     struct wlr_scene_buffer *shadow_pieces[9];
     /// The minimize animation running, if any.
     struct cwl_animation *animation;
+    /// The space the window is on, and whether it's fullscreen there.
+    int space;
+    bool fullscreen;
     /// The title bar the compositor draws, or NULL.
     struct wlr_scene_buffer *title_bar;
     int title_bar_height;
@@ -275,14 +290,17 @@ void cwl_toplevel_animation_committed(CWLToplevel *toplevel);
 /// window is destroyed.
 void cwl_toplevel_cancel_animation(CWLToplevel *toplevel);
 
-// MARK: dock.c
+// MARK: spaces.c
 
-/// The minimize target the dock set for an app, in the layout's
-/// coordinates.
-bool cwl_dock_minimize_target(CWLServer *server, const char *app_id, struct wlr_box *box);
+/// Makes each space's trees, with the first space shown.
+bool cwl_spaces_init(CWLServer *server);
 
-/// Frees the minimize targets.
-void cwl_dock_finish(CWLServer *server);
+/// Stops a slide, as the server goes.
+void cwl_spaces_finish(CWLServer *server);
+
+/// The tree a window's frame belongs in: its space's windows, or its
+/// space's fullscreen windows.
+struct wlr_scene_tree *cwl_toplevel_parent_tree(CWLToplevel *toplevel);
 
 // MARK: shadow.c
 
@@ -360,6 +378,13 @@ void cwl_decoration_apply(struct cwl_decoration *decoration);
 // MARK: dock.c
 
 bool cwl_dock_init(CWLServer *server);
+
+/// The minimize target the dock set for an app, in the layout's
+/// coordinates.
+bool cwl_dock_minimize_target(CWLServer *server, const char *app_id, struct wlr_box *box);
+
+/// Frees the minimize targets.
+void cwl_dock_finish(CWLServer *server);
 
 // MARK: server.c
 
