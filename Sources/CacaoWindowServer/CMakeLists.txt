@@ -7,4 +7,9 @@ cacao_shell_add_executable(CacaoWindowServer ${sources})
 target_link_libraries(CacaoWindowServer PRIVATE
   CacaoShellKit
   CWLRoots
-  DBus)
+  DBus
+  # Title bars, drawn as Cacao draws its own.
+  CacaoTokens
+  CacaoRender
+  Silica
+  SilicaCairo)
