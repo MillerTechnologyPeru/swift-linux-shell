@@ -18,7 +18,7 @@ The Cacao desktop: a compositor, menu bar, dock and settings service, written in
 | `CToplevelList` | C target | The dock's client of the compositor's window list (wlr-foreign-toplevel-management) |
 
 - `Protocols/` holds the private dock protocol, and the third-party protocol XML the generated code comes from.
-- `Data/` holds the portal registration, the D-Bus service files, the session script and its entries, and the sway config for the stand-in session.
+- `Data/` holds the portal registration, the D-Bus service files, the session script and its entries, and the sway config for the fallback session.
 
 ## Building
 
@@ -31,7 +31,7 @@ swift build
 
 SDL3 is needed for the menu bar and dock, as for Cacao. One wlroots release is pinned: 0.18.
 
-Until `CacaoWindowServer` replaces it, sway runs the default session with `Data/sway/config`. The session on `CacaoWindowServer` has its own entry, Cacao (CacaoWindowServer), which runs `cacao-session --window-server`. In it, Control-Alt-F1 to F12 switch VTs. The session's shortcuts are the Mac's, with Super as Command: Super-Shift-Q asks to log out, Super-Alt-Shift-Q logs out without asking, and Super-Alt-Escape opens Force Quit. The menu bar's system menu has the same actions, and Sleep, Restart and Shut Down.
+The Cacao session runs on `CacaoWindowServer` (`cacao-session`). Sway, the stand-in compositor from before it, stays as a fallback session, Cacao (sway), which runs `cacao-session --sway` with `Data/sway/config`. In the Cacao session, Control-Alt-F1 to F12 switch VTs. The session's shortcuts are the Mac's, with Super as Command: Super-Shift-Q asks to log out, Super-Alt-Shift-Q logs out without asking, and Super-Alt-Escape opens Force Quit. The menu bar's system menu has the same actions, and Sleep, Restart and Shut Down.
 
 The compositor can also be run nested in another Wayland or X11 session:
 
