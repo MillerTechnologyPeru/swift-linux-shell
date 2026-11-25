@@ -17,6 +17,7 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
@@ -38,6 +39,14 @@
 /// `enum zwlr_layer_shell_v1_layer`. Windows sit between bottom and top.
 #define CWL_LAYER_COUNT 4
 
+/// What the pointer is doing: passing input to clients, or moving or
+/// resizing a window.
+enum cwl_cursor_mode {
+    CWL_CURSOR_PASSTHROUGH,
+    CWL_CURSOR_MOVE,
+    CWL_CURSOR_RESIZE
+};
+
 /// What a scene node's `data` points to. Every such struct starts with this.
 enum cwl_node_kind {
     CWL_NODE_TOPLEVEL = 1,
@@ -57,6 +66,9 @@ struct CWLServer {
     struct wlr_scene_output_layout *scene_layout;
     struct wlr_scene_tree *layers[CWL_LAYER_COUNT];
     struct wlr_scene_tree *windows;
+    /// Full-screen windows: above the menu bar and dock, under the overlay
+    /// layer.
+    struct wlr_scene_tree *fullscreen;
 
     struct wl_list outputs;   // struct cwl_output.link
     struct wl_list toplevels; // CWLToplevel.link
@@ -70,6 +82,14 @@ struct CWLServer {
     struct wlr_xcursor_manager *cursor_manager;
     struct wl_global *appmenu_global;
     struct wl_global *dock_global;
+    struct wlr_foreign_toplevel_manager_v1 *foreign_toplevels;
+
+    // An interactive move or resize.
+    enum cwl_cursor_mode cursor_mode;
+    CWLToplevel *grabbed;
+    double grab_x, grab_y;
+    struct wlr_box grab_box;
+    uint32_t resize_edges;
 
     CWLBox usable_area;
     const char *socket;
@@ -86,6 +106,13 @@ struct CWLServer {
     struct wl_listener cursor_frame;
     struct wl_listener request_cursor;
     struct wl_listener request_set_selection;
+    struct wl_listener request_set_primary_selection;
+    struct wl_listener new_decoration;
+    struct wl_listener new_virtual_pointer;
+    struct wl_listener request_activate;
+
+    /// Whether `cwl_protocols_init` added its listeners.
+    bool protocols_ready;
 };
 
 struct cwl_output {
@@ -113,9 +140,26 @@ struct CWLToplevel {
     struct wl_listener destroy;
     struct wl_listener set_title;
     struct wl_listener set_app_id;
+    /// The window's xdg-decoration object, if it asked for one.
+    struct cwl_decoration *decoration;
+    struct wl_listener request_move;
+    struct wl_listener request_resize;
+    struct wl_listener request_maximize;
+    struct wl_listener request_fullscreen;
+    struct wl_listener request_minimize;
+
+    /// The window in the window list (wlr-foreign-toplevel-management),
+    /// while it's mapped.
+    struct wlr_foreign_toplevel_handle_v1 *handle;
+    struct wl_listener handle_request_activate;
+    struct wl_listener handle_request_close;
+    struct wl_listener handle_request_maximize;
+    struct wl_listener handle_request_minimize;
+    struct wl_listener handle_request_fullscreen;
 };
 
 struct cwl_popup {
+    CWLServer *server;
     struct wlr_xdg_popup *xdg_popup;
     struct wl_listener commit;
     struct wl_listener destroy;
@@ -131,6 +175,7 @@ struct cwl_layer_surface {
     struct wl_listener map;
     struct wl_listener unmap;
     struct wl_listener commit;
+    struct wl_listener new_popup;
     struct wl_listener destroy;
 };
 
@@ -140,6 +185,13 @@ struct cwl_keyboard {
     struct wlr_keyboard *wlr_keyboard;
     struct wl_listener modifiers;
     struct wl_listener key;
+    struct wl_listener destroy;
+};
+
+struct cwl_decoration {
+    CWLServer *server;
+    struct wlr_xdg_toplevel_decoration_v1 *decoration;
+    struct wl_listener request_mode;
     struct wl_listener destroy;
 };
 
@@ -157,6 +209,18 @@ struct cwl_appmenu {
 
 void cwl_handle_new_toplevel(struct wl_listener *listener, void *data);
 void cwl_handle_new_popup(struct wl_listener *listener, void *data);
+
+/// Shows a popup in its parent's scene tree.
+void cwl_popup_create(CWLServer *server, struct wlr_xdg_popup *xdg_popup, struct wlr_scene_tree *parent_tree);
+
+/// Tells clients which input devices the seat has.
+void cwl_server_update_capabilities(CWLServer *server);
+
+/// Ends an interactive move or resize, as when its window goes.
+void cwl_server_end_grab(CWLServer *server);
+
+/// Tells the window list which window is active.
+void cwl_toplevel_handle_set_activated(CWLToplevel *toplevel, bool activated);
 
 /// The window a surface belongs to, or NULL.
 CWLToplevel *cwl_toplevel_from_surface(CWLServer *server, struct wlr_surface *surface);
@@ -178,6 +242,14 @@ bool cwl_appmenu_init(CWLServer *server);
 
 /// The appmenu object for a surface, or NULL.
 struct cwl_appmenu *cwl_appmenu_for_surface(CWLServer *server, struct wlr_surface *surface);
+
+// MARK: protocols.c
+
+bool cwl_protocols_init(CWLServer *server);
+void cwl_protocols_finish(CWLServer *server);
+
+/// Sends a window its decoration mode, once it can be sent.
+void cwl_decoration_apply(struct cwl_decoration *decoration);
 
 // MARK: dock.c
 
