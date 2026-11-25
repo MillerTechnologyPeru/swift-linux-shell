@@ -254,6 +254,11 @@ void cwl_toplevel_title_bar_changed(CWLToplevel *toplevel);
 /// in the title bar's coordinates.
 CWLToplevel *cwl_title_bar_at(CWLServer *server, double lx, double ly, double *x, double *y);
 
+/// The window that draws no edges of its own (it has the compositor's
+/// title bar) whose resize border is at a point in the layout, and the
+/// edges the point is beyond.
+CWLToplevel *cwl_frame_border_at(CWLServer *server, double lx, double ly, uint32_t *edges);
+
 /// Tells Swift the left button went down or up on a window's title bar.
 void cwl_title_bar_notify_button(CWLServer *server, CWLToplevel *toplevel, bool pressed);
 
