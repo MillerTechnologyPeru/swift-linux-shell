@@ -81,11 +81,11 @@ struct TitleBar: Equatable {
     // MARK: Drawing
 
     /// The title bar's pixels: premultiplied RGBA, top row first.
-    func draw() -> Silica.CGImage? {
+    func draw() -> Silica.Image? {
         Self.registerBackend
         let height = Self.height
         guard width > 0,
-              let context = try? CairoContext(bitmap: CGSize(width: width, height: height))
+              let context = BitmapContext(width: Double(width), height: Double(height))
         else {
             return nil
         }
@@ -96,7 +96,7 @@ struct TitleBar: Equatable {
         // The line along the bottom.
         let separator = tokens.metrics.separatorWidth
         context.setFillColor(colors.separator)
-        context.addRect(CGRect(x: 0, y: CGFloat(height) - separator, width: CGFloat(width), height: separator))
+        context.addRect(Rect(CGRect(x: 0, y: CGFloat(height) - separator, width: CGFloat(width), height: separator)))
         context.fillPath()
 
         drawTitle(in: context)
@@ -107,7 +107,7 @@ struct TitleBar: Equatable {
     }
 
     /// The bar's shading, top to bottom, a row at a time.
-    private func drawBackground(_ gradient: StyleTokens.Gradient, in context: Silica.CGContext) {
+    private func drawBackground(_ gradient: StyleTokens.Gradient, in context: GraphicsContext) {
         let height = Self.height
         let top = gradient.top
         let bottom = gradient.bottom
@@ -119,14 +119,14 @@ struct TitleBar: Equatable {
                 blue: top.blue + (bottom.blue - top.blue) * t,
                 opacity: top.opacity + (bottom.opacity - top.opacity) * t
             ))
-            context.addRect(CGRect(x: 0, y: CGFloat(row), width: CGFloat(width), height: 1))
+            context.addRect(Rect(x: 0, y: Double(row), width: Double(width), height: 1))
             context.fillPath()
         }
     }
 
     /// The title, centered between the buttons, cut short with an ellipsis
     /// when it doesn't fit.
-    private func drawTitle(in context: Silica.CGContext) {
+    private func drawTitle(in context: GraphicsContext) {
         let tokens = Self.tokens
         let resolved = tokens.fonts.windowTitle
         guard !title.isEmpty, let font = Self.font(for: resolved) else { return }
@@ -136,9 +136,9 @@ struct TitleBar: Equatable {
         guard available > size else { return }
 
         var scalars = Array(title.unicodeScalars)
-        func advances(_ scalars: [Unicode.Scalar]) -> (glyphs: [CGGlyph], widths: [CGFloat]) {
+        func advances(_ scalars: [Unicode.Scalar]) -> (glyphs: [Glyph], widths: [CGFloat]) {
             let glyphs = scalars.map { font.glyph(for: $0) }
-            let widths = font.advances(for: glyphs, fontSize: size).map(\.width)
+            let widths = font.advances(for: glyphs).map { CGFloat($0) * size }
             return (glyphs, widths)
         }
         var shaped = advances(scalars)
@@ -162,29 +162,28 @@ struct TitleBar: Equatable {
         let descent = -font.descent * size
         let baseline = ((CGFloat(Self.height) - (ascent + descent)) / 2 + ascent).rounded()
         var x = ((CGFloat(width) - textWidth) / 2).rounded()
-        var glyphs: [(glyph: CGGlyph, position: CGPoint)] = []
+        var glyphs: [(glyph: Glyph, position: Point)] = []
         for (index, glyph) in shaped.glyphs.enumerated() {
             if scalars[index] != " " {
-                glyphs.append((glyph, CGPoint(x: x, y: baseline)))
+                glyphs.append((glyph, Point(x: Double(x), y: Double(baseline))))
             }
             x += shaped.widths[index]
         }
         let colors = tokens.titleBar
-        context.setFont(font)
-        context.fontSize = size
+        context.setFont(Font(face: font, size: Double(size)))
         context.setFillColor(isActive ? colors.text : colors.inactiveText)
-        context.draw(glyphs: glyphs)
+        context.showGlyphs(glyphs.map(\.glyph), at: glyphs.map(\.position))
     }
 
     /// A window button: a circle with a glyph, red while pressed for close.
-    private func drawButton(_ button: WindowButtonLayout.Button, in frame: CGRect, context: Silica.CGContext) {
+    private func drawButton(_ button: WindowButtonLayout.Button, in frame: CGRect, context: GraphicsContext) {
         let tokens = Self.tokens
         let colors = tokens.titleBar.windowButton
         let isPressed = pressedButton == button
         let warns = button == .close && isPressed
         let fill = warns ? colors.closeHoverFill : isPressed ? colors.pressedFill : colors.fill
         context.setFillColor(fill)
-        context.addEllipse(in: frame)
+        context.addEllipse(in: Rect(frame))
         context.fillPath()
 
         let glyphSize = tokens.metrics.windowButtonGlyphSize
@@ -197,43 +196,43 @@ struct TitleBar: Equatable {
         context.beginPath()
         switch button {
         case .close:
-            context.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            context.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            context.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-            context.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            context.move(to: Point(CGPoint(x: rect.minX, y: rect.minY)))
+            context.addLine(to: Point(CGPoint(x: rect.maxX, y: rect.maxY)))
+            context.move(to: Point(CGPoint(x: rect.maxX, y: rect.minY)))
+            context.addLine(to: Point(CGPoint(x: rect.minX, y: rect.maxY)))
         case .minimize:
-            context.move(to: CGPoint(x: rect.minX, y: rect.midY))
-            context.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+            context.move(to: Point(CGPoint(x: rect.minX, y: rect.midY)))
+            context.addLine(to: Point(CGPoint(x: rect.maxX, y: rect.midY)))
         case .maximize where isMaximized:
             // Two squares: restore.
             let side = rect.width * 0.75
             let offset = rect.width - side
-            context.addRect(CGRect(x: rect.minX, y: rect.minY + offset, width: side, height: side))
-            context.move(to: CGPoint(x: rect.minX + offset, y: rect.minY + offset))
-            context.addLine(to: CGPoint(x: rect.minX + offset, y: rect.minY))
-            context.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            context.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + side))
-            context.addLine(to: CGPoint(x: rect.minX + side, y: rect.minY + side))
+            context.addRect(Rect(CGRect(x: rect.minX, y: rect.minY + offset, width: side, height: side)))
+            context.move(to: Point(CGPoint(x: rect.minX + offset, y: rect.minY + offset)))
+            context.addLine(to: Point(CGPoint(x: rect.minX + offset, y: rect.minY)))
+            context.addLine(to: Point(CGPoint(x: rect.maxX, y: rect.minY)))
+            context.addLine(to: Point(CGPoint(x: rect.maxX, y: rect.minY + side)))
+            context.addLine(to: Point(CGPoint(x: rect.minX + side, y: rect.minY + side)))
         case .maximize:
-            context.addRect(rect)
+            context.addRect(Rect(rect))
         @unknown default:
             // A button Cacao's layouts gain later: no glyph.
             break
         }
         context.setStrokeColor(warns ? colors.closeHoverGlyph : colors.glyph)
-        context.lineWidth = 1.5
-        context.lineCap = .round
-        context.lineJoin = .round
+        context.setLineWidth(1.5)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
         context.strokePath()
     }
 
     // MARK: Fonts
 
-    nonisolated(unsafe) private static var fonts: [ResolvedFont: Silica.CGFont] = [:]
+    nonisolated(unsafe) private static var fonts: [ResolvedFont: any FontFace] = [:]
 
     /// The fontconfig font for a resolved font, found as Cacao's text engine
     /// finds it.
-    private static func font(for resolved: ResolvedFont) -> Silica.CGFont? {
+    private static func font(for resolved: ResolvedFont) -> (any FontFace)? {
         if let font = fonts[resolved] {
             return font
         }
@@ -245,7 +244,7 @@ struct TitleBar: Equatable {
         // fontconfig's generic family; Silica's names can't contain "-".
         candidates += ["Sans" + traits, "Sans"]
         for name in candidates {
-            if let font = Silica.CGFont(name: name) {
+            if let font = SilicaBackend.fontFace(named: name) {
                 fonts[resolved] = font
                 return font
             }
@@ -259,13 +258,27 @@ struct TitleBar: Equatable {
     }()
 }
 
-private extension Silica.CGContext {
+private extension GraphicsContext {
 
     func setFillColor(_ color: ResolvedColor) {
-        setFillColor(red: CGFloat(color.red), green: CGFloat(color.green), blue: CGFloat(color.blue), alpha: CGFloat(color.opacity))
+        setFillColor(red: Double(color.red), green: Double(color.green), blue: Double(color.blue), alpha: Double(color.opacity))
     }
 
     func setStrokeColor(_ color: ResolvedColor) {
-        setStrokeColor(red: CGFloat(color.red), green: CGFloat(color.green), blue: CGFloat(color.blue), alpha: CGFloat(color.opacity))
+        setStrokeColor(red: Double(color.red), green: Double(color.green), blue: Double(color.blue), alpha: Double(color.opacity))
+    }
+}
+
+private extension Point {
+
+    init(_ point: CGPoint) {
+        self.init(x: Double(point.x), y: Double(point.y))
+    }
+}
+
+private extension Rect {
+
+    init(_ rect: CGRect) {
+        self.init(x: Double(rect.minX), y: Double(rect.minY), width: Double(rect.width), height: Double(rect.height))
     }
 }
