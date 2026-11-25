@@ -12,6 +12,7 @@ add_library(CWLRoots STATIC
   layer.c
   protocols.c
   server.c
+  titlebar.c
   toplevel.c)
 
 target_compile_definitions(CWLRoots PRIVATE
