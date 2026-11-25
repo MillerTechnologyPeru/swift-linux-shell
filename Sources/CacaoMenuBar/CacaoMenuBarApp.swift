@@ -21,6 +21,8 @@ struct CacaoMenuBarApp: App {
     init() {
         // The Wayland app_id.
         SDLHost.appIdentifier = "org.pureswift.Cacao.MenuBar"
+        // Its windows are the shell's, not an app's: no menus of its own.
+        SDLHost.exportsMenus = false
     }
 
     var body: some Scene {
@@ -35,6 +37,27 @@ struct CacaoMenuBarApp: App {
             exclusiveZone: MenuBarView.height,
             namespace: "cacao-menu-bar"
         )
+
+        // The system menu's windows: in the middle of the screen, over
+        // everything, and not among apps' windows, so neither the dock nor
+        // the menu bar takes them for an app's.
+        WindowGroup("Confirm", for: SessionAction.self) { $action in
+            SessionConfirmation(action: action ?? .logOut)
+        }
+        .defaultSize(width: 420, height: 160)
+        .windowLayer(.overlay, edges: [], keyboardInteractivity: .exclusive, namespace: "cacao-dialog")
+
+        Window("Force Quit Applications", id: SystemActions.forceQuitWindowID) {
+            ForceQuitView()
+        }
+        .defaultSize(width: 400, height: 320)
+        .windowLayer(.overlay, edges: [], keyboardInteractivity: .exclusive, namespace: "cacao-dialog")
+
+        Window("About This Computer", id: SystemActions.aboutWindowID) {
+            AboutView()
+        }
+        .defaultSize(width: 320, height: 240)
+        .windowLayer(.overlay, edges: [], keyboardInteractivity: .onDemand, namespace: "cacao-dialog")
     }
 }
 
@@ -46,7 +69,7 @@ struct MenuBarView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "circle.grid.2x2")
+            SystemMenu()
             HStack(spacing: 0) {
                 // The app menu, in bold: the app's own when it serves one,
                 // else the default one, or the desktop's with no window
