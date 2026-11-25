@@ -30,7 +30,7 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(CACAO_SHELL_BUILD_APPS "Build the menu bar and dock, which need Cacao and SDL3" ON)
 if(CMAKE_SYSTEM_NAME STREQUAL Linux)
-  option(CACAO_SHELL_BUILD_COMPOSITOR "Build CacaoWindowServer, which needs wlroots 0.18" ON)
+  option(CACAO_SHELL_BUILD_COMPOSITOR "Build CacaoWindowServer, which needs wlroots 0.18, and Cacao's tokens and Silica for title bars" ON)
 else()
   # It needs wlroots and libwayland-server.
   set(CACAO_SHELL_BUILD_COMPOSITOR OFF)

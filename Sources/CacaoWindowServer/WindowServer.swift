@@ -26,14 +26,35 @@ final class WindowServer {
     private(set) var usableArea = CWLBox()
 
     /// The window with keyboard focus.
-    private(set) var focusedWindow: Window?
+    private(set) var focusedWindow: Window? {
+        didSet {
+            // Title bars show which window has focus.
+            if oldValue !== focusedWindow {
+                oldValue?.isActive = false
+                focusedWindow?.isActive = true
+            }
+        }
+    }
 
-    /// Tells the shell which window has focus.
-    private let focusService = FocusService()
+    /// Work other threads hand the main thread, such as the shell's calls.
+    nonisolated let mainQueue = MainThreadQueue()
+
+    /// Tells the shell which window has focus, and asks it for dialogs.
+    private let service: WindowServerService
 
     init(policy: any WindowPolicy) {
         self.policy = policy
+        let queue = mainQueue
+        service = WindowServerService { call in
+            queue.async {
+                WindowServer.current?.perform(call)
+            }
+        }
+        WindowServer.current = self
     }
+
+    /// The running window server, for work from other threads.
+    private static weak var current: WindowServer?
 
     /// Creates the display and backend and opens the Wayland socket.
     ///
@@ -116,11 +137,39 @@ final class WindowServer {
                 server.request(toplevel) { server.policy.windowRequestedActivation($0, server: server) }
             }
         }
+        callbacks.woken = { context in
+            guard let context else { return }
+            nonisolated(unsafe) let unsafeContext = context
+            MainActor.assumeIsolated {
+                Unmanaged<WindowServer>.fromOpaque(unsafeContext).takeUnretainedValue().mainQueue.drain()
+            }
+        }
+        callbacks.toplevel_title_bar_changed = { context, toplevel in
+            WindowServer.dispatch(context, toplevel) { server, toplevel in
+                server.windows[toplevel]?.updateTitleBar()
+            }
+        }
+        callbacks.toplevel_title_bar_button = { context, toplevel, x, y, pressed in
+            WindowServer.dispatch(context, toplevel) { server, toplevel in
+                server.request(toplevel) { window in
+                    let point = CGPoint(x: x, y: y)
+                    if pressed {
+                        server.policy.windowTitleBarPressed(window, at: point, server: server)
+                    } else {
+                        server.policy.windowTitleBarReleased(window, at: point, server: server)
+                    }
+                }
+            }
+        }
 
         guard let server = cwl_server_create(callbacks) else {
             throw .backend
         }
         self.server = server
+        nonisolated(unsafe) let wakeServer = server
+        mainQueue.setWake {
+            cwl_server_wake(wakeServer)
+        }
         guard let socket = cwl_server_start(server) else {
             throw .socket
         }
@@ -155,6 +204,38 @@ final class WindowServer {
         guard focusedWindow !== window else { return }
         focusedWindow = window
         focusChanged()
+    }
+
+    /// Ends the session: the event loop stops, and apps lose their windows
+    /// with the display.
+    func logOut() {
+        log("Logging out")
+        terminate()
+    }
+
+    /// Ends every window's app with an `app_id` at once.
+    func forceQuit(appID: String) {
+        let targets = windows.values.filter { $0.appID == appID }
+        guard !targets.isEmpty else { return }
+        log("Force quitting \(appID)")
+        for window in targets {
+            cwl_toplevel_kill(window.toplevel)
+        }
+    }
+
+    /// Asks the shell to show an action's dialog, such as Log Out….
+    func requestShellAction(_ action: WindowServerActions.Action) {
+        service.request(action)
+    }
+
+    /// A call from the shell, on the main thread.
+    private func perform(_ call: WindowServerService.Call) {
+        switch call {
+        case .logOut:
+            logOut()
+        case let .forceQuit(appID):
+            forceQuit(appID: appID)
+        }
     }
 
     /// Focuses nothing, as when the last window goes away.
@@ -223,6 +304,8 @@ final class WindowServer {
     private func toplevelUnmapped(_ toplevel: OpaquePointer) {
         guard let window = windows[toplevel] else { return }
         window.isMapped = false
+        // Its title bar goes with it.
+        window.updateTitleBar()
         let wasFocused = focusedWindow === window
         if wasFocused {
             focusedWindow = nil
@@ -247,8 +330,12 @@ final class WindowServer {
     }
 
     private func toplevelChanged(_ toplevel: OpaquePointer) {
-        guard let window = windows[toplevel], window === focusedWindow else { return }
-        focusChanged()
+        guard let window = windows[toplevel] else { return }
+        // The title bar shows the title.
+        window.updateTitleBar()
+        if window === focusedWindow {
+            focusChanged()
+        }
     }
 
     private func toplevelAppMenuChanged(_ toplevel: OpaquePointer) {
@@ -275,13 +362,13 @@ final class WindowServer {
     private func focusChanged() {
         guard let window = focusedWindow else {
             log("Focus: none")
-            focusService.update(nil)
+            service.update(nil)
             return
         }
         window.lastFocused = Window.nextFocusSerial()
         let menu = window.appMenu.map { "\($0.service) \($0.path)" } ?? "no exported menu"
         log("Focus: \(window.appID ?? "unknown app") \"\(window.title ?? "")\", \(menu)")
-        focusService.update(window.focusedWindow)
+        service.update(window.focusedWindow)
     }
 }
 

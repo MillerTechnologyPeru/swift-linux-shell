@@ -4,6 +4,7 @@
 //
 
 import CWLRoots
+import Foundation
 
 /// Free-floating windows: new windows cascade from the top left of the
 /// usable area and take focus, a click focuses and raises, and when the
@@ -23,6 +24,12 @@ final class DesktopPolicy: WindowPolicy {
 
     private var cascadeIndex: Int32 = 0
 
+    /// The last press on a title bar, to tell a double click.
+    private var lastTitleBarPress: (window: ObjectIdentifier, time: Date)?
+
+    /// How soon a second press on a title bar is a double click.
+    let doubleClickInterval: TimeInterval = 0.4
+
     func windowMapped(_ window: Window, server: WindowServer) {
         if !window.isPlaced {
             place(window, in: server.usableArea)
@@ -37,15 +44,69 @@ final class DesktopPolicy: WindowPolicy {
     }
 
     func shortcut(_ shortcut: Shortcut, server: WindowServer) -> Bool {
-        // Super is Command, and Command-Shift-Q logs out. With no dialog to
-        // confirm it yet, it ends the session at once; apps get their
-        // windows closed with the display.
+        // The Mac's, with Super as Command. Those with a dialog the shell
+        // shows; logging out without one the window server does itself.
+        // Control-Command-Q, Lock Screen, is left to apps until there's a
+        // lock screen.
+        if shortcut.matches("q", super: true, shift: true, alt: true) {
+            // Option-Shift-Command-Q: Log Out, without asking.
+            server.logOut()
+            return true
+        }
         if shortcut.matches("q", super: true, shift: true) {
-            log("Logging out")
-            server.terminate()
+            // Shift-Command-Q: Log Out…, which asks first.
+            server.requestShellAction(.logOut)
+            return true
+        }
+        if shortcut.matches(keysym: Shortcut.escape, super: true, alt: true) {
+            // Option-Command-Escape: Force Quit….
+            server.requestShellAction(.forceQuit)
             return true
         }
         return false
+    }
+
+    // MARK: Title bars
+
+    func windowTitleBarPressed(_ window: Window, at point: CGPoint, server: WindowServer) {
+        server.focus(window)
+        // The buttons act when the pointer comes up on them.
+        if let button = TitleBar.button(at: point, width: Int(window.geometry.width)) {
+            window.pressedTitleBarButton = button
+            lastTitleBarPress = nil
+            return
+        }
+        let now = Date()
+        if let last = lastTitleBarPress, last.window == ObjectIdentifier(window),
+           now.timeIntervalSince(last.time) < doubleClickInterval {
+            // A double click zooms, as the maximize button does.
+            lastTitleBarPress = nil
+            windowRequestedMaximize(window, !window.isMaximized, server: server)
+            return
+        }
+        lastTitleBarPress = (ObjectIdentifier(window), now)
+        // Dragging the title bar moves the window; a maximized one stays.
+        if !window.isMaximized, !window.isFullscreen {
+            window.beginMove()
+        }
+    }
+
+    func windowTitleBarReleased(_ window: Window, at point: CGPoint, server: WindowServer) {
+        guard let pressed = window.pressedTitleBarButton else { return }
+        window.pressedTitleBarButton = nil
+        guard TitleBar.button(at: point, width: Int(window.geometry.width)) == pressed else { return }
+        switch pressed {
+        case .close:
+            window.close()
+        case .minimize:
+            windowRequestedMinimize(window, true, server: server)
+        case .maximize:
+            windowRequestedMaximize(window, !window.isMaximized, server: server)
+        @unknown default:
+            // A button Cacao's layouts gain later; the title bar shows only
+            // these.
+            break
+        }
     }
 
     func windowClicked(_ window: Window, server: WindowServer) {
