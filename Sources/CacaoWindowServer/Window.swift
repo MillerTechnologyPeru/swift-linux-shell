@@ -5,6 +5,7 @@
 
 import CWLRoots
 import CacaoShellKit
+import CacaoTokens
 import DBus
 
 /// An xdg-shell window, as the policy sees it.
@@ -103,11 +104,69 @@ final class Window {
     func setMaximized(_ maximized: Bool) {
         isMaximized = maximized
         cwl_toplevel_set_maximized(toplevel, maximized)
+        updateTitleBar()
     }
 
+    /// Puts the window over the whole output, or back. A fullscreen window
+    /// has no title bar, so set the frame after this.
     func setFullscreen(_ fullscreen: Bool) {
         isFullscreen = fullscreen
         cwl_toplevel_set_fullscreen(toplevel, fullscreen)
+        updateTitleBar()
+    }
+
+    // MARK: Title bar
+
+    /// Whether the window has keyboard focus, as its title bar shows.
+    var isActive = false {
+        didSet {
+            if isActive != oldValue {
+                updateTitleBar()
+            }
+        }
+    }
+
+    /// The window button the pointer went down on in the title bar the
+    /// compositor draws.
+    var pressedTitleBarButton: WindowButtonLayout.Button? {
+        didSet {
+            if pressedTitleBarButton != oldValue {
+                updateTitleBar()
+            }
+        }
+    }
+
+    /// The title bar as last drawn, or nil when the window has none.
+    private(set) var titleBar: TitleBar?
+
+    /// Whether the compositor draws the window's title bar: it asked for
+    /// server-side decorations, and isn't fullscreen.
+    var hasTitleBar: Bool {
+        titleBar != nil
+    }
+
+    /// Draws the title bar again if anything it shows changed, adds it if
+    /// the window came to want one, or takes it away.
+    func updateTitleBar() {
+        guard isMapped, !isFullscreen, cwl_toplevel_wants_title_bar(toplevel) else {
+            if titleBar != nil {
+                titleBar = nil
+                cwl_toplevel_set_title_bar(toplevel, nil, 0, 0, 0)
+            }
+            return
+        }
+        let bar = TitleBar(
+            width: Int(geometry.width),
+            title: title ?? appID ?? "",
+            isActive: isActive,
+            isMaximized: isMaximized,
+            pressedButton: pressedTitleBarButton
+        )
+        guard bar != titleBar, let image = bar.draw() else { return }
+        titleBar = bar
+        image.data.withUnsafeBytes { pixels in
+            cwl_toplevel_set_title_bar(toplevel, pixels.baseAddress, Int32(image.width), Int32(image.height), Int32(image.bytesPerRow))
+        }
     }
 
     /// Moves the window with the pointer until the button is released.
