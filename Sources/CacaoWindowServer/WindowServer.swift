@@ -28,6 +28,9 @@ final class WindowServer {
     /// The window with keyboard focus.
     private(set) var focusedWindow: Window?
 
+    /// Tells the shell which window has focus.
+    private let focusService = FocusService()
+
     init(policy: any WindowPolicy) {
         self.policy = policy
     }
@@ -75,6 +78,37 @@ final class WindowServer {
             }
         }
 
+        callbacks.toplevel_requested_move = { context, toplevel in
+            WindowServer.dispatch(context, toplevel) { server, toplevel in
+                server.request(toplevel) { server.policy.windowRequestedMove($0, server: server) }
+            }
+        }
+        callbacks.toplevel_requested_resize = { context, toplevel, edges in
+            WindowServer.dispatch(context, toplevel) { server, toplevel in
+                server.request(toplevel) { server.policy.windowRequestedResize($0, edges: edges, server: server) }
+            }
+        }
+        callbacks.toplevel_requested_maximize = { context, toplevel, maximized in
+            WindowServer.dispatch(context, toplevel) { server, toplevel in
+                server.request(toplevel) { server.policy.windowRequestedMaximize($0, maximized, server: server) }
+            }
+        }
+        callbacks.toplevel_requested_fullscreen = { context, toplevel, fullscreen in
+            WindowServer.dispatch(context, toplevel) { server, toplevel in
+                server.request(toplevel) { server.policy.windowRequestedFullscreen($0, fullscreen, server: server) }
+            }
+        }
+        callbacks.toplevel_requested_minimize = { context, toplevel, minimized in
+            WindowServer.dispatch(context, toplevel) { server, toplevel in
+                server.request(toplevel) { server.policy.windowRequestedMinimize($0, minimized, server: server) }
+            }
+        }
+        callbacks.toplevel_requested_activation = { context, toplevel in
+            WindowServer.dispatch(context, toplevel) { server, toplevel in
+                server.request(toplevel) { server.policy.windowRequestedActivation($0, server: server) }
+            }
+        }
+
         guard let server = cwl_server_create(callbacks) else {
             throw .backend
         }
@@ -117,6 +151,9 @@ final class WindowServer {
 
     /// Focuses nothing, as when the last window goes away.
     func clearFocus() {
+        if let server {
+            cwl_server_clear_focus(server)
+        }
         guard focusedWindow != nil else { return }
         focusedWindow = nil
         focusChanged()
@@ -125,6 +162,22 @@ final class WindowServer {
     /// Every mapped window, most recently focused first.
     var mappedWindows: [Window] {
         windows.values.filter(\.isMapped).sorted { $0.lastFocused > $1.lastFocused }
+    }
+
+    /// The mapped windows that aren't minimized, most recently focused first.
+    var visibleWindows: [Window] {
+        mappedWindows.filter(\.isVisible)
+    }
+
+    /// The whole of the screen, for full-screen windows.
+    var outputBox: CWLBox {
+        server.map(cwl_server_output_box) ?? CWLBox()
+    }
+
+    /// Hands a request for a known, mapped window to the policy.
+    fileprivate func request(_ toplevel: OpaquePointer, _ body: (Window) -> Void) {
+        guard let window = windows[toplevel], window.isMapped else { return }
+        body(window)
     }
 
     // MARK: Callbacks
@@ -162,10 +215,15 @@ final class WindowServer {
     private func toplevelUnmapped(_ toplevel: OpaquePointer) {
         guard let window = windows[toplevel] else { return }
         window.isMapped = false
-        if focusedWindow === window {
+        let wasFocused = focusedWindow === window
+        if wasFocused {
             focusedWindow = nil
         }
         policy.windowUnmapped(window, server: self)
+        if wasFocused, focusedWindow == nil {
+            // The policy focused no other window.
+            focusChanged()
+        }
     }
 
     private func toplevelDestroyed(_ toplevel: OpaquePointer) {
@@ -174,6 +232,9 @@ final class WindowServer {
         if focusedWindow === window {
             focusedWindow = nil
             policy.windowUnmapped(window, server: self)
+            if focusedWindow == nil {
+                focusChanged()
+            }
         }
     }
 
@@ -202,16 +263,17 @@ final class WindowServer {
         log("Exposé requested: \(mode), app \(appID ?? "none"). Not implemented yet.")
     }
 
-    /// The menu bar will follow focus through this. Until the menu bar's
-    /// link to the compositor exists, it is logged.
+    /// Tells the shell, for the menu bar to show the window's menus.
     private func focusChanged() {
         guard let window = focusedWindow else {
             log("Focus: none")
+            focusService.update(nil)
             return
         }
         window.lastFocused = Window.nextFocusSerial()
         let menu = window.appMenu.map { "\($0.service) \($0.path)" } ?? "no exported menu"
         log("Focus: \(window.appID ?? "unknown app") \"\(window.title ?? "")\", \(menu)")
+        focusService.update(window.focusedWindow)
     }
 }
 

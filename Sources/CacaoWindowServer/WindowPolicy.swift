@@ -23,6 +23,25 @@ protocol WindowPolicy: AnyObject {
 
     /// The menu bar or dock reserved a different area.
     func usableAreaChanged(_ area: CWLBox, server: WindowServer)
+
+    // Requests from windows, the dock, or other apps. Nothing happens
+    // unless the policy acts.
+
+    /// The window asked to be moved with the pointer, as from its title bar.
+    func windowRequestedMove(_ window: Window, server: WindowServer)
+
+    /// The window asked to be resized with the pointer from some edges.
+    func windowRequestedResize(_ window: Window, edges: CWLEdges, server: WindowServer)
+
+    func windowRequestedMaximize(_ window: Window, _ maximized: Bool, server: WindowServer)
+
+    func windowRequestedFullscreen(_ window: Window, _ fullscreen: Bool, server: WindowServer)
+
+    func windowRequestedMinimize(_ window: Window, _ minimized: Bool, server: WindowServer)
+
+    /// The dock, or another app through xdg-activation, asked for the
+    /// window to come forward.
+    func windowRequestedActivation(_ window: Window, server: WindowServer)
 }
 
 @MainActor

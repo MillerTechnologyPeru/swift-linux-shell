@@ -4,6 +4,8 @@
 //
 
 import CWLRoots
+import CacaoShellKit
+import DBus
 
 /// An xdg-shell window, as the policy sees it.
 @MainActor
@@ -20,6 +22,21 @@ final class Window {
 
     /// Orders windows by when they last had focus.
     var lastFocused: UInt64 = 0
+
+    private(set) var isMinimized = false
+
+    private(set) var isMaximized = false
+
+    private(set) var isFullscreen = false
+
+    /// Where the window was before it was maximized or made full screen,
+    /// to go back to.
+    var restoreFrame: CWLBox?
+
+    /// Whether the window is on screen and not minimized.
+    var isVisible: Bool {
+        isMapped && !isMinimized
+    }
 
     init(toplevel: OpaquePointer) {
         self.toplevel = toplevel
@@ -45,7 +62,17 @@ final class Window {
         return (String(cString: service), String(cString: path))
     }
 
-    /// The window's position in the layout and its size.
+    /// What the shell is told when the window has focus.
+    var focusedWindow: FocusedWindow {
+        let menu = appMenu.flatMap { menu in
+            DBusBusName(rawValue: menu.service).flatMap { service in
+                DBusObjectPath(rawValue: menu.path).map { FocusedWindow.Menu(service: service, path: $0) }
+            }
+        }
+        return FocusedWindow(appID: appID ?? "", title: title ?? "", menu: menu)
+    }
+
+        /// The window's position in the layout and its size.
     var geometry: CWLBox {
         cwl_toplevel_geometry(toplevel)
     }
@@ -60,6 +87,37 @@ final class Window {
 
     func close() {
         cwl_toplevel_close(toplevel)
+    }
+
+    /// Moves the window to a frame: its position and its size.
+    func setFrame(_ frame: CWLBox) {
+        move(x: frame.x, y: frame.y)
+        resize(width: frame.width, height: frame.height)
+    }
+
+    func setMinimized(_ minimized: Bool) {
+        isMinimized = minimized
+        cwl_toplevel_set_minimized(toplevel, minimized)
+    }
+
+    func setMaximized(_ maximized: Bool) {
+        isMaximized = maximized
+        cwl_toplevel_set_maximized(toplevel, maximized)
+    }
+
+    func setFullscreen(_ fullscreen: Bool) {
+        isFullscreen = fullscreen
+        cwl_toplevel_set_fullscreen(toplevel, fullscreen)
+    }
+
+    /// Moves the window with the pointer until the button is released.
+    func beginMove() {
+        cwl_toplevel_begin_move(toplevel)
+    }
+
+    /// Resizes the window with the pointer from some edges.
+    func beginResize(edges: CWLEdges) {
+        cwl_toplevel_begin_resize(toplevel, edges)
     }
 
     private static var focusSerial: UInt64 = 0
