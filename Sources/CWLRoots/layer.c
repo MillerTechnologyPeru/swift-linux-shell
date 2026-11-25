@@ -12,11 +12,47 @@
 #include <stdlib.h>
 #include "server.h"
 
+// MARK: Keyboard
+
+void cwl_server_update_layer_focus(CWLServer *server) {
+    // The topmost: the overlay layer before the top one.
+    struct wlr_layer_surface_v1 *exclusive = NULL;
+    struct cwl_output *output;
+    wl_list_for_each(output, &server->outputs, link) {
+        struct cwl_layer_surface *surface;
+        wl_list_for_each(surface, &output->layer_surfaces, link) {
+            struct wlr_layer_surface_v1 *layer = surface->layer_surface;
+            if (!layer->surface->mapped ||
+                layer->current.keyboard_interactive != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE ||
+                layer->current.layer < ZWLR_LAYER_SHELL_V1_LAYER_TOP) {
+                continue;
+            }
+            if (!exclusive || layer->current.layer > exclusive->current.layer) {
+                exclusive = layer;
+            }
+        }
+    }
+    if (exclusive == server->exclusive_layer) {
+        return;
+    }
+    server->exclusive_layer = exclusive;
+    if (exclusive) {
+        cwl_server_keyboard_enter(server, exclusive->surface);
+    } else if (server->focused_toplevel) {
+        cwl_server_keyboard_enter(server, server->focused_toplevel->xdg_toplevel->base->surface);
+    } else {
+        wlr_seat_keyboard_notify_clear_focus(server->seat);
+    }
+}
+
+// MARK: Surfaces
+
 static void layer_surface_map(struct wl_listener *listener, void *data) {
     struct cwl_layer_surface *surface = wl_container_of(listener, surface, map);
     if (surface->output) {
         cwl_output_arrange_layers(surface->output);
     }
+    cwl_server_update_layer_focus(surface->server);
 }
 
 static void layer_surface_unmap(struct wl_listener *listener, void *data) {
@@ -24,6 +60,7 @@ static void layer_surface_unmap(struct wl_listener *listener, void *data) {
     if (surface->output) {
         cwl_output_arrange_layers(surface->output);
     }
+    cwl_server_update_layer_focus(surface->server);
 }
 
 static void layer_surface_commit(struct wl_listener *listener, void *data) {
@@ -45,11 +82,16 @@ static void layer_surface_commit(struct wl_listener *listener, void *data) {
     if (layer_surface->initial_commit || layer_surface->current.committed != 0) {
         cwl_output_arrange_layers(surface->output);
     }
+    // It may have come to want the keyboard to itself, or stopped.
+    if (layer_surface->current.committed & WLR_LAYER_SURFACE_V1_STATE_KEYBOARD_INTERACTIVITY) {
+        cwl_server_update_layer_focus(server);
+    }
 }
 
 static void layer_surface_destroy(struct wl_listener *listener, void *data) {
     struct cwl_layer_surface *surface = wl_container_of(listener, surface, destroy);
     struct cwl_output *output = surface->output;
+    CWLServer *server = surface->server;
     wl_list_remove(&surface->map.link);
     wl_list_remove(&surface->unmap.link);
     wl_list_remove(&surface->commit.link);
@@ -60,6 +102,8 @@ static void layer_surface_destroy(struct wl_listener *listener, void *data) {
     if (output) {
         cwl_output_arrange_layers(output);
     }
+    // Once it's out of the list, the keyboard goes elsewhere if it had it.
+    cwl_server_update_layer_focus(server);
 }
 
 static void layer_surface_new_popup(struct wl_listener *listener, void *data) {
