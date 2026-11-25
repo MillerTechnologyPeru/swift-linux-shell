@@ -126,16 +126,18 @@ struct DockView: View {
 
     @ObservedObject var running = RunningWindows.shared
 
+    @ObservedObject var badges = LauncherBadges.shared
+
     var body: some View {
         HStack(spacing: Self.spacing) {
             ForEach(launchers, id: \.id) { entry in
-                LauncherButton(entry: entry, windows: running.windows(of: entry))
+                LauncherButton(entry: entry, windows: running.windows(of: entry), state: badges.state(for: entry))
             }
             ForEach(otherApps) { app in
                 Button {
                     Launchers.toggle(app.windows)
                 } label: {
-                    LauncherIcon(systemName: "macwindow", title: app.name, isRunning: true)
+                    LauncherIcon(systemName: "macwindow", title: app.name, isRunning: true, state: badges.state(forAppID: app.id))
                 }
                 .buttonStyle(.plain)
                 .help(app.windows.last?.title ?? app.name)
@@ -177,6 +179,9 @@ struct LauncherButton: View {
     /// The app's open windows.
     let windows: [RunningWindow]
 
+    /// Its badge, progress and urgency.
+    let state: LauncherEntryState?
+
     var body: some View {
         Button {
             if windows.isEmpty {
@@ -186,7 +191,7 @@ struct LauncherButton: View {
             }
         } label: {
             // Icon themes come with Cacao's icon theme lookup.
-            LauncherIcon(systemName: "square.grid.2x2", title: entry.name, isRunning: !windows.isEmpty)
+            LauncherIcon(systemName: "square.grid.2x2", title: entry.name, isRunning: !windows.isEmpty, state: state)
         }
         .buttonStyle(.plain)
         .help(entry.comment ?? entry.name)
@@ -204,11 +209,39 @@ struct LauncherIcon: View {
 
     var isRunning = false
 
+    /// The app's badge, progress and urgency.
+    var state: LauncherEntryState? = nil
+
     var body: some View {
         VStack(spacing: 2) {
             Image(systemName: systemName)
                 .font(.system(size: 32))
                 .frame(width: 48, height: 48)
+                // An app that wants attention.
+                .background {
+                    if state?.isUrgent == true {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.orange.opacity(0.35))
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if let state, state.isProgressVisible {
+                        ProgressView(value: state.progress)
+                            .frame(width: 40)
+                            .offset(y: 2)
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if let badge = state?.badge {
+                        Text(badge)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .frame(minWidth: 18, minHeight: 18)
+                            .background(Capsule().fill(Color.red))
+                            .offset(x: 4, y: -4)
+                    }
+                }
             Text(title)
                 .font(.system(size: 9))
                 .lineLimit(1)
