@@ -1,10 +1,34 @@
 #!/bin/sh
-# Starts the Cacao session. Until CacaoWindowServer replaces it, sway is the
-# compositor, with a config that floats every window.
+# Starts the Cacao session.
+#
+#   cacao-session                  sway as the compositor, with a config that
+#                                  floats every window: the default until
+#                                  CacaoWindowServer replaces it
+#   cacao-session --window-server  CacaoWindowServer as the compositor
 
 export XDG_CURRENT_DESKTOP=Cacao
 export XDG_SESSION_DESKTOP=cacao
 export XDG_SESSION_TYPE=wayland
 
-CONFIG="${CACAO_SWAY_CONFIG:-/usr/share/cacao/sway/config}"
-exec sway --config "$CONFIG" "$@"
+case "$1" in
+--window-server)
+    shift
+    # The window server runs the shell once its display is up.
+    exec CacaoWindowServer -s "\"$0\" --start-shell" "$@"
+    ;;
+--start-shell)
+    # xdg-desktop-portal and D-Bus activated services need the session's
+    # Wayland display and desktop name.
+    dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
+    CacaoSettings &
+    # The desktop's wallpaper and icons, from Files (swift-linux-core-apps).
+    files --desktop &
+    CacaoMenuBar &
+    CacaoDock &
+    wait
+    ;;
+*)
+    CONFIG="${CACAO_SWAY_CONFIG:-/usr/share/cacao/sway/config}"
+    exec sway --config "$CONFIG" "$@"
+    ;;
+esac
