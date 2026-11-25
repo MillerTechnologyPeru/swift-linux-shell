@@ -63,7 +63,55 @@ final class DesktopPolicy: WindowPolicy {
             server.requestShellAction(.forceQuit)
             return true
         }
+        return spaceShortcut(shortcut, server: server)
+    }
+
+    // MARK: Spaces
+
+    /// The Mac's shortcuts for spaces: Control-Left and Right to the space
+    /// beside, Control-1 to 4 to a space. With Shift, Control-Left and
+    /// Right take the focused window along.
+    private func spaceShortcut(_ shortcut: Shortcut, server: WindowServer) -> Bool {
+        let current = server.currentSpace
+        for (keysym, step) in [(Shortcut.left, -1), (Shortcut.right, 1)] {
+            if shortcut.matches(keysym: keysym, control: true) {
+                show(space: current + step, server: server)
+                return true
+            }
+            if shortcut.matches(keysym: keysym, shift: true, control: true) {
+                if let window = server.focusedWindow {
+                    move(window, toSpace: current + step, server: server)
+                }
+                return true
+            }
+        }
+        for space in 0..<WindowServer.spaceCount {
+            let digit = UInt32(Character("1").asciiValue! + UInt8(space))
+            if shortcut.matches(keysym: digit, control: true) {
+                show(space: space, server: server)
+                return true
+            }
+        }
         return false
+    }
+
+    /// Shows a space and focuses the window used last on it.
+    func show(space: Int, server: WindowServer) {
+        guard (0..<WindowServer.spaceCount).contains(space), space != server.currentSpace else { return }
+        server.showSpace(space)
+        if let next = server.visibleWindows.first {
+            server.focus(next)
+        } else {
+            server.clearFocus()
+        }
+    }
+
+    /// Moves a window to another space, and goes there with it.
+    func move(_ window: Window, toSpace space: Int, server: WindowServer) {
+        guard (0..<WindowServer.spaceCount).contains(space), space != window.space else { return }
+        window.setSpace(space)
+        server.showSpace(space)
+        server.focus(window)
     }
 
     // MARK: Title bars
@@ -190,6 +238,10 @@ final class DesktopPolicy: WindowPolicy {
     }
 
     func windowRequestedActivation(_ window: Window, server: WindowServer) {
+        // A window on another space: that space comes to it.
+        if window.space != server.currentSpace {
+            server.showSpace(window.space)
+        }
         if window.isMinimized {
             window.setMinimized(false)
         }
