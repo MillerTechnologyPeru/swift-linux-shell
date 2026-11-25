@@ -111,6 +111,11 @@ typedef struct CWLServerCallbacks {
     void (*toplevel_title_bar_button)(void *context, CWLToplevel *toplevel, double x, double y, bool pressed);
     /// `cwl_server_wake` was called, from any thread.
     void (*woken)(void *context);
+    /// During Exposé, a window was clicked, or the desktop (NULL).
+    void (*expose_window_chosen)(void *context, CWLToplevel *toplevel);
+    /// During Exposé, a key was pressed that no shortcut took: its XKB
+    /// keysym.
+    void (*expose_key)(void *context, uint32_t keysym);
 } CWLServerCallbacks;
 
 /// The version of wlroots the shim was built against.
@@ -131,6 +136,23 @@ void cwl_server_run(CWLServer *server);
 
 /// Makes `cwl_server_run` return.
 void cwl_server_terminate(CWLServer *server);
+
+/// Starts Exposé: windows are drawn where `cwl_toplevel_show_preview` puts
+/// them, the rest hidden with `cwl_toplevel_hide_for_expose`, and clicks
+/// and keys go to the callbacks instead of apps until it ends.
+void cwl_server_begin_expose(CWLServer *server);
+
+/// Ends Exposé, moving the windows back.
+void cwl_server_end_expose(CWLServer *server);
+
+bool cwl_server_expose_active(CWLServer *server);
+
+/// Draws a window smaller, its frame fitted into a box in the layout, for
+/// as long as Exposé lasts.
+void cwl_toplevel_show_preview(CWLToplevel *toplevel, CWLBox box);
+
+/// Hides a window for as long as Exposé lasts.
+void cwl_toplevel_hide_for_expose(CWLToplevel *toplevel);
 
 /// How many spaces there are: desktops of their own windows, one shown at a
 /// time.

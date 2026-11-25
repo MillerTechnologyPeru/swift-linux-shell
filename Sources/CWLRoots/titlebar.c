@@ -126,8 +126,14 @@ void cwl_toplevel_set_title_bar(CWLToplevel *toplevel, const void *pixels, int32
     if (!toplevel->title_bar) {
         return;
     }
+    // Its size, given explicitly: the scene may let the pixels go once
+    // they're uploaded, and scaling for animations and Exposé needs it.
+    wlr_scene_buffer_set_dest_size(toplevel->title_bar, width, height);
     toplevel->title_bar_height = height;
     cwl_toplevel_layout_frame(toplevel);
+    // A new title bar during an animation or Exposé is scaled with the rest.
+    cwl_toplevel_animation_committed(toplevel);
+    cwl_toplevel_preview_committed(toplevel);
 }
 
 void cwl_toplevel_title_bar_changed(CWLToplevel *toplevel) {

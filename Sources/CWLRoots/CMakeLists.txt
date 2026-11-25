@@ -10,10 +10,12 @@ add_library(CWLRoots STATIC
   animation.c
   appmenu.c
   dock.c
+  expose.c
   layer.c
   protocols.c
   server.c
   shadow.c
+  snapshot.c
   spaces.c
   titlebar.c
   toplevel.c)

@@ -164,6 +164,14 @@ static void keyboard_key(struct wl_listener *listener, void *data) {
     if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && handle_key(server, keyboard->wlr_keyboard, event->keycode)) {
         return;
     }
+    // During Exposé, keys go to it, not to apps: Escape ends it.
+    if (server->expose) {
+        if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && server->callbacks.expose_key) {
+            xkb_keysym_t sym = xkb_state_key_get_one_sym(keyboard->wlr_keyboard->xkb_state, event->keycode + 8);
+            server->callbacks.expose_key(server->callbacks.context, sym);
+        }
+        return;
+    }
     wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
     wlr_seat_keyboard_notify_key(server->seat, event->time_msec, event->keycode, event->state);
 }
@@ -338,6 +346,17 @@ static void process_cursor_motion(CWLServer *server, uint32_t time) {
     }
     double sx, sy;
     struct wlr_surface *surface = surface_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
+    // During Exposé, only the shell's surfaces, such as the dock, see the
+    // pointer; windows are being picked.
+    if (surface && server->expose &&
+        !wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface_get_root_surface(surface))) {
+        surface = NULL;
+    }
+    if (!surface && server->expose) {
+        wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+        wlr_seat_pointer_clear_focus(server->seat);
+        return;
+    }
     if (!surface) {
         // Around a window with the compositor's title bar, the cursor shows
         // which way it resizes.
@@ -381,6 +400,21 @@ static void cursor_button(struct wl_listener *listener, void *data) {
         }
         wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
         return;
+    }
+    // During Exposé, a press picks a window, or nothing on the desktop;
+    // the shell's surfaces, such as the dock, take theirs as usual.
+    if (server->expose) {
+        double lsx, lsy;
+        struct wlr_surface *under = surface_at(server, server->cursor->x, server->cursor->y, &lsx, &lsy);
+        bool on_shell = under && wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface_get_root_surface(under)) &&
+            !cwl_expose_toplevel_at(server, server->cursor->x, server->cursor->y);
+        if (!on_shell) {
+            if (event->button == BTN_LEFT && server->callbacks.expose_window_chosen) {
+                server->callbacks.expose_window_chosen(server->callbacks.context,
+                    cwl_expose_toplevel_at(server, server->cursor->x, server->cursor->y));
+            }
+            return;
+        }
     }
     // Just outside a window with the compositor's title bar, the press
     // resizes it, as the window would from its own edges.
@@ -513,6 +547,7 @@ CWLServer *cwl_server_create(CWLServerCallbacks callbacks) {
     wl_list_init(&server->keyboards);
     wl_list_init(&server->appmenus);
     wl_list_init(&server->minimize_targets);
+    wl_list_init(&server->previews);
 
     server->display = wl_display_create();
     server->wake_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
@@ -685,6 +720,7 @@ void cwl_server_destroy(CWLServer *server) {
     if (server->shadow_image) {
         wlr_buffer_drop(server->shadow_image);
     }
+    cwl_expose_finish(server);
     cwl_dock_finish(server);
     cwl_spaces_finish(server);
     if (server->wake_fd >= 0) {

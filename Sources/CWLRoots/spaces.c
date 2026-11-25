@@ -14,23 +14,12 @@
 
 #include <math.h>
 #include <stdlib.h>
-#include <time.h>
 #include "server.h"
 
 /// How long a slide from one space to another takes, in milliseconds.
 static const int slide_duration = 300;
 
 static const int slide_interval = 16;
-
-static int64_t now_ms(void) {
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
-}
-
-static double ease(double t) {
-    return t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2;
-}
 
 bool cwl_spaces_init(CWLServer *server) {
     for (int i = 0; i < CWL_SPACE_COUNT; i++) {
@@ -79,14 +68,14 @@ static void slide_finish(CWLServer *server) {
 
 static int slide_tick(void *data) {
     CWLServer *server = data;
-    double progress = fmin((double)(now_ms() - server->slide_start) / slide_duration, 1);
+    double progress = fmin((double)(cwl_now_ms() - server->slide_start) / slide_duration, 1);
     if (progress >= 1) {
         slide_finish(server);
         return 0;
     }
     // The old space leaves to one side as the new one comes in from the
     // other: later spaces are to the right.
-    double e = ease(progress);
+    double e = cwl_ease(progress);
     int width = server->slide_width;
     int direction = server->current_space > server->slide_from ? 1 : -1;
     set_space_offset(server, server->slide_from, (int)lround(-direction * width * e));
@@ -119,7 +108,7 @@ void cwl_server_show_space(CWLServer *server, int32_t space) {
     }
     server->slide_from = from;
     server->slide_width = output.width;
-    server->slide_start = now_ms();
+    server->slide_start = cwl_now_ms();
     server->slide_timer = wl_event_loop_add_timer(wl_display_get_event_loop(server->display), slide_tick, server);
     if (!server->slide_timer) {
         slide_finish(server);
