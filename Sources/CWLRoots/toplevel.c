@@ -116,6 +116,7 @@ static void toplevel_map(struct wl_listener *listener, void *data) {
     if (server->callbacks.toplevel_mapped) {
         server->callbacks.toplevel_mapped(server->callbacks.context, toplevel);
     }
+    cwl_toplevel_title_bar_changed(toplevel);
 }
 
 static void toplevel_unmap(struct wl_listener *listener, void *data) {
@@ -124,6 +125,12 @@ static void toplevel_unmap(struct wl_listener *listener, void *data) {
     toplevel->mapped = false;
     if (server->grabbed == toplevel) {
         cwl_server_end_grab(server);
+    }
+    if (server->title_bar_pressed == toplevel) {
+        server->title_bar_pressed = NULL;
+    }
+    if (server->focused_toplevel == toplevel) {
+        server->focused_toplevel = NULL;
     }
     handle_destroy(toplevel);
     if (server->callbacks.toplevel_unmapped) {
@@ -147,6 +154,19 @@ static void toplevel_commit(struct wl_listener *listener, void *data) {
         if (toplevel->decoration) {
             cwl_decoration_apply(toplevel->decoration);
         }
+        return;
+    }
+    // A new size means the title bar is drawn again at the new width, and
+    // the content's offset in the frame may have moved.
+    struct wlr_box geometry;
+    wlr_xdg_surface_get_geometry(toplevel->xdg_toplevel->base, &geometry);
+    if (toplevel->title_bar) {
+        cwl_toplevel_layout_frame(toplevel);
+    }
+    if (geometry.width != toplevel->content_width || geometry.height != toplevel->content_height) {
+        toplevel->content_width = geometry.width;
+        toplevel->content_height = geometry.height;
+        cwl_toplevel_title_bar_changed(toplevel);
     }
 }
 
@@ -243,6 +263,12 @@ static void toplevel_destroy(struct wl_listener *listener, void *data) {
     if (server->grabbed == toplevel) {
         cwl_server_end_grab(server);
     }
+    if (server->title_bar_pressed == toplevel) {
+        server->title_bar_pressed = NULL;
+    }
+    if (server->focused_toplevel == toplevel) {
+        server->focused_toplevel = NULL;
+    }
     handle_destroy(toplevel);
     if (server->callbacks.toplevel_destroyed) {
         server->callbacks.toplevel_destroyed(server->callbacks.context, toplevel);
@@ -270,10 +296,13 @@ void cwl_handle_new_toplevel(struct wl_listener *listener, void *data) {
     toplevel->kind = CWL_NODE_TOPLEVEL;
     toplevel->server = server;
     toplevel->xdg_toplevel = xdg_toplevel;
-    toplevel->scene_tree = wlr_scene_xdg_surface_create(server->windows, xdg_toplevel->base);
+    // The frame holds the content, and a title bar above it when the
+    // compositor draws one.
+    toplevel->scene_tree = wlr_scene_tree_create(server->windows);
     toplevel->scene_tree->node.data = toplevel;
+    toplevel->content_tree = wlr_scene_xdg_surface_create(toplevel->scene_tree, xdg_toplevel->base);
     // Popups find their parent's scene tree here.
-    xdg_toplevel->base->data = toplevel->scene_tree;
+    xdg_toplevel->base->data = toplevel->content_tree;
 
     toplevel->map.notify = toplevel_map;
     wl_signal_add(&xdg_toplevel->base->surface->events.map, &toplevel->map);
@@ -341,7 +370,7 @@ static void popup_unconstrain(struct cwl_popup *popup) {
     if (toplevel) {
         struct wlr_box geometry;
         wlr_xdg_surface_get_geometry(toplevel->xdg_toplevel->base, &geometry);
-        wlr_scene_node_coords(&toplevel->scene_tree->node, &root_x, &root_y);
+        wlr_scene_node_coords(&toplevel->content_tree->node, &root_x, &root_y);
         root_x += geometry.x;
         root_y += geometry.y;
     } else {
@@ -435,13 +464,15 @@ const char *cwl_toplevel_appmenu_path(CWLToplevel *toplevel) {
 }
 
 CWLBox cwl_toplevel_geometry(CWLToplevel *toplevel) {
+    // The frame: the content, and the title bar above it.
     struct wlr_box geometry;
     wlr_xdg_surface_get_geometry(toplevel->xdg_toplevel->base, &geometry);
+    int bar = toplevel->title_bar ? toplevel->title_bar_height : 0;
     return (CWLBox){
         toplevel->scene_tree->node.x,
         toplevel->scene_tree->node.y,
         geometry.width,
-        geometry.height
+        geometry.height + bar
     };
 }
 
@@ -450,39 +481,36 @@ void cwl_toplevel_set_position(CWLToplevel *toplevel, int32_t x, int32_t y) {
 }
 
 void cwl_toplevel_set_size(CWLToplevel *toplevel, int32_t width, int32_t height) {
+    // The frame's height includes the title bar; the content gets the rest.
+    // Zero still lets the client choose.
+    int bar = toplevel->title_bar ? toplevel->title_bar_height : 0;
+    if (height > 0) {
+        height = height > bar ? height - bar : 1;
+    }
     wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, width, height);
 }
 
 void cwl_toplevel_focus(CWLToplevel *toplevel) {
     CWLServer *server = toplevel->server;
-    struct wlr_seat *seat = server->seat;
     struct wlr_surface *surface = toplevel->xdg_toplevel->base->surface;
-    struct wlr_surface *previous = seat->keyboard_state.focused_surface;
 
     wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
     wl_list_remove(&toplevel->link);
     wl_list_insert(&server->toplevels, &toplevel->link);
 
-    if (previous == surface) {
-        return;
+    CWLToplevel *previous = server->focused_toplevel;
+    if (previous && previous != toplevel) {
+        wlr_xdg_toplevel_set_activated(previous->xdg_toplevel, false);
+        cwl_toplevel_handle_set_activated(previous, false);
     }
-    if (previous) {
-        struct wlr_xdg_toplevel *previous_toplevel = wlr_xdg_toplevel_try_from_wlr_surface(previous);
-        if (previous_toplevel && previous_toplevel != toplevel->xdg_toplevel) {
-            wlr_xdg_toplevel_set_activated(previous_toplevel, false);
-            CWLToplevel *previous_window = cwl_toplevel_from_surface(server, previous);
-            if (previous_window) {
-                cwl_toplevel_handle_set_activated(previous_window, false);
-            }
-        }
-    }
+    server->focused_toplevel = toplevel;
     wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
     cwl_toplevel_handle_set_activated(toplevel, true);
-    struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
-    if (keyboard) {
-        wlr_seat_keyboard_notify_enter(seat, surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
-    } else {
-        wlr_seat_keyboard_notify_enter(seat, surface, NULL, 0, NULL);
+    // A layer surface that took the keyboard keeps it; the window gets it
+    // back when the layer surface goes. Clicking the menu bar gives it the
+    // keyboard, so clicking the window again takes it back.
+    if (!server->exclusive_layer && server->seat->keyboard_state.focused_surface != surface) {
+        cwl_server_keyboard_enter(server, surface);
     }
 }
 

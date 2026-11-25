@@ -30,8 +30,8 @@
 
 /// The mode a window gets: the one it asks for, and client-side when it
 /// doesn't ask. Cacao apps ask for client-side and draw their own title
-/// bar. Apps that ask for server-side get no title bar until the compositor
-/// draws them.
+/// bar. Apps that ask for server-side, such as Mac apps on Perry, Qt apps
+/// and SDL games, get the title bar the compositor draws (titlebar.c).
 static enum wlr_xdg_toplevel_decoration_v1_mode decoration_mode(struct wlr_xdg_toplevel_decoration_v1 *decoration) {
     if (decoration->requested_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_NONE) {
         return WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
@@ -47,9 +47,24 @@ void cwl_decoration_apply(struct cwl_decoration *decoration) {
     }
 }
 
+/// The window a decoration belongs to.
+static CWLToplevel *decoration_toplevel(struct cwl_decoration *decoration) {
+    CWLToplevel *toplevel;
+    wl_list_for_each(toplevel, &decoration->server->toplevels, link) {
+        if (toplevel->decoration == decoration) {
+            return toplevel;
+        }
+    }
+    return NULL;
+}
+
 static void decoration_request_mode(struct wl_listener *listener, void *data) {
     struct cwl_decoration *decoration = wl_container_of(listener, decoration, request_mode);
     cwl_decoration_apply(decoration);
+    CWLToplevel *toplevel = decoration_toplevel(decoration);
+    if (toplevel) {
+        cwl_toplevel_title_bar_changed(toplevel);
+    }
 }
 
 static void decoration_destroy(struct wl_listener *listener, void *data) {
@@ -57,7 +72,9 @@ static void decoration_destroy(struct wl_listener *listener, void *data) {
     CWLToplevel *toplevel;
     wl_list_for_each(toplevel, &decoration->server->toplevels, link) {
         if (toplevel->decoration == decoration) {
+            // The window draws its own title bar again.
             toplevel->decoration = NULL;
+            cwl_toplevel_title_bar_changed(toplevel);
         }
     }
     wl_list_remove(&decoration->request_mode.link);
@@ -87,6 +104,10 @@ static void handle_new_decoration(struct wl_listener *listener, void *data) {
         }
     }
     cwl_decoration_apply(decoration);
+    toplevel = decoration_toplevel(decoration);
+    if (toplevel) {
+        cwl_toplevel_title_bar_changed(toplevel);
+    }
 }
 
 // MARK: Primary selection

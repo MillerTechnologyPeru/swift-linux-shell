@@ -102,6 +102,15 @@ typedef struct CWLServerCallbacks {
     /// key; false sends it to the focused window. Switching VTs never gets
     /// here.
     bool (*key_shortcut)(void *context, CWLModifiers modifiers, uint32_t keysym);
+    /// A window's title bar needs drawing: it came to want one, or stopped,
+    /// or its content changed size. See `cwl_toplevel_wants_title_bar`.
+    void (*toplevel_title_bar_changed)(void *context, CWLToplevel *toplevel);
+    /// The left button went down or up on a window's title bar, at a point
+    /// in the title bar's coordinates. Up comes wherever the pointer is,
+    /// for the press that went down on it.
+    void (*toplevel_title_bar_button)(void *context, CWLToplevel *toplevel, double x, double y, bool pressed);
+    /// `cwl_server_wake` was called, from any thread.
+    void (*woken)(void *context);
 } CWLServerCallbacks;
 
 /// The version of wlroots the shim was built against.
@@ -122,6 +131,10 @@ void cwl_server_run(CWLServer *server);
 
 /// Makes `cwl_server_run` return.
 void cwl_server_terminate(CWLServer *server);
+
+/// Has the event loop call the `woken` callback soon. Safe from any thread,
+/// unlike the rest of the shim.
+void cwl_server_wake(CWLServer *server);
 
 /// Disconnects clients and frees everything.
 void cwl_server_destroy(CWLServer *server);
@@ -155,6 +168,20 @@ const char *cwl_toplevel_appmenu_path(CWLToplevel *toplevel);
 
 /// The window's geometry: its position in the layout and its size.
 CWLBox cwl_toplevel_geometry(CWLToplevel *toplevel);
+
+/// Whether the window asked for the compositor to draw its title bar: for
+/// server-side decorations.
+bool cwl_toplevel_wants_title_bar(CWLToplevel *toplevel);
+
+/// Ends the window's app at once, as Force Quit does: its process is
+/// killed, or, when that's unknown, its connection closed.
+void cwl_toplevel_kill(CWLToplevel *toplevel);
+
+/// Shows a title bar `height` pixels tall above the window's content, from
+/// premultiplied RGBA pixels with the top row first; with NULL pixels,
+/// takes it away. The window's frame, as `cwl_toplevel_geometry` gives it
+/// and `cwl_toplevel_set_size` takes it, includes the title bar.
+void cwl_toplevel_set_title_bar(CWLToplevel *toplevel, const void *pixels, int32_t width, int32_t height, int32_t bytes_per_row);
 
 /// Moves the window to a position in the layout.
 void cwl_toplevel_set_position(CWLToplevel *toplevel, int32_t x, int32_t y);
