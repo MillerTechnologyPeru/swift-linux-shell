@@ -165,7 +165,10 @@ CWLToplevel *cwl_frame_border_at(CWLServer *server, double lx, double ly, uint32
     CWLToplevel *toplevel;
     wl_list_for_each(toplevel, &server->toplevels, link) {
         struct wlr_xdg_toplevel *xdg = toplevel->xdg_toplevel;
-        if (!toplevel->mapped || !toplevel->title_bar || !toplevel->scene_tree->node.enabled ||
+        // Shown, with its space and every tree above it.
+        int frame_x, frame_y;
+        if (!toplevel->mapped || !toplevel->title_bar ||
+            !wlr_scene_node_coords(&toplevel->scene_tree->node, &frame_x, &frame_y) ||
             xdg->current.maximized || xdg->current.fullscreen) {
             continue;
         }
