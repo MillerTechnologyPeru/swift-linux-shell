@@ -66,8 +66,10 @@ if server.hasSeatSession {
     }
 }
 
-// The desktop's look, for the title bars the window server draws.
+// The desktop's look, for the title bars the window server draws, and its
+// effects.
 server.followAppearance()
+server.followEffects()
 
 if let startupCommand {
     // WAYLAND_DISPLAY is already set, so the command connects to this server.
