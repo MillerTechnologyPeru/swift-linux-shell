@@ -203,6 +203,11 @@ var compositorTargets: [Target] {
                     name: "CacaoTokens",
                     package: "Cacao"
                 ),
+                // And in the desktop's appearance, from the settings portal.
+                .product(
+                    name: "CacaoDBus",
+                    package: "Cacao"
+                ),
                 .product(
                     name: "CacaoRender",
                     package: "Cacao"
