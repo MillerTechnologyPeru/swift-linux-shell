@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.pureswift.Cacao.Settings
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/CacaoSettings
