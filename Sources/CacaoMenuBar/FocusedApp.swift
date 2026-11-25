@@ -122,9 +122,29 @@ final class FocusedApp {
                     self?.report(window)
                 }
             }
+            // The shortcuts the window server takes whose dialogs the menu
+            // bar shows, such as Shift-Command-Q's Log Out….
+            let actions = try await connection.signals(
+                interface: ShellDBus.windowServerInterface,
+                member: WindowServerActions.actionRequested,
+                sender: owner
+            )
+            Task {
+                for await message in actions {
+                    guard case let .string(name)? = message.arguments.first,
+                          let action = WindowServerActions.Action(rawValue: name)
+                    else { continue }
+                    SystemActions.shared.handle(action)
+                }
+            }
         } catch {
             print("[CacaoMenuBar] Couldn't follow the window server's focus: \(error)")
         }
+    }
+
+    /// The `app_id`s of the apps with windows open.
+    var runningAppIDs: [String] {
+        Array(Set(windows.values.compactMap(\.appID)))
     }
 
     /// Asks every window of the focused app to close: the default app
