@@ -556,6 +556,10 @@ CWLServer *cwl_server_create(CWLServerCallbacks callbacks) {
     server->layers[ZWLR_LAYER_SHELL_V1_LAYER_TOP] = wlr_scene_tree_create(&server->scene->tree);
     server->fullscreen = wlr_scene_tree_create(&server->scene->tree);
     server->layers[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY] = wlr_scene_tree_create(&server->scene->tree);
+    if (!cwl_spaces_init(server)) {
+        wlr_log(WLR_ERROR, "Could not create the spaces");
+        goto fail;
+    }
 
     // Version 5 tells windows what the window manager can do
     // (wm_capabilities), so they show only the buttons that work.
@@ -682,6 +686,7 @@ void cwl_server_destroy(CWLServer *server) {
         wlr_buffer_drop(server->shadow_image);
     }
     cwl_dock_finish(server);
+    cwl_spaces_finish(server);
     if (server->wake_fd >= 0) {
         close(server->wake_fd);
     }
