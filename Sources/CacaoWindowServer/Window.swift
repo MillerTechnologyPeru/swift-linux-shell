@@ -39,6 +39,16 @@ final class Window {
         isMapped && !isMinimized
     }
 
+    /// The space the window is on.
+    var space: Int {
+        Int(cwl_toplevel_space(toplevel))
+    }
+
+    /// Moves the window to another space.
+    func setSpace(_ space: Int) {
+        cwl_toplevel_set_space(toplevel, Int32(space))
+    }
+
     init(toplevel: OpaquePointer) {
         self.toplevel = toplevel
     }
