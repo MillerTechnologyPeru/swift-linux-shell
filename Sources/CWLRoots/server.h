@@ -12,6 +12,7 @@
 
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
+#include <wlr/backend/session.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
@@ -58,6 +59,9 @@ struct CWLServer {
 
     struct wl_display *display;
     struct wlr_backend *backend;
+    /// The seat session on a VT, through logind or seatd; NULL when nested
+    /// or headless.
+    struct wlr_session *session;
     struct wlr_renderer *renderer;
     struct wlr_allocator *allocator;
 
