@@ -166,6 +166,9 @@ struct PortalSettings {
             settings.cursorSize = size
         case ("org.gnome.desktop.wm.preferences", "button-layout", let .string(layout)):
             settings.buttonLayout = layout
+        case (AppearanceSettings.cacaoNamespace, "effects", let .boolean(on)),
+             ("org.gnome.desktop.interface", "enable-animations", let .boolean(on)):
+            settings.effects = on
         default:
             break
         }
