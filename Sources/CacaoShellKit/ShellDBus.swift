@@ -68,4 +68,12 @@ public enum ShellDBus {
     public static let settingsName = DBusBusName(rawValue: "org.pureswift.Cacao.Settings")!
     public static let settingsInterface = DBusInterface(rawValue: "org.pureswift.Cacao.Settings1")!
     public static let settingsPath = DBusObjectPath(rawValue: "/org/pureswift/Cacao/Settings")!
+
+    // MARK: Window server
+
+    /// The compositor's own interface, which tells the shell which window
+    /// has focus and where its menus are. See `FocusedWindow`.
+    public static let windowServerName = DBusBusName(rawValue: "org.pureswift.Cacao.WindowServer")!
+    public static let windowServerInterface = DBusInterface(rawValue: "org.pureswift.Cacao.WindowServer1")!
+    public static let windowServerPath = DBusObjectPath(rawValue: "/org/pureswift/Cacao/WindowServer")!
 }
