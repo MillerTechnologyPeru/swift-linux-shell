@@ -53,12 +53,20 @@ static void layer_surface_destroy(struct wl_listener *listener, void *data) {
     wl_list_remove(&surface->map.link);
     wl_list_remove(&surface->unmap.link);
     wl_list_remove(&surface->commit.link);
+    wl_list_remove(&surface->new_popup.link);
     wl_list_remove(&surface->destroy.link);
     wl_list_remove(&surface->link);
     free(surface);
     if (output) {
         cwl_output_arrange_layers(output);
     }
+}
+
+static void layer_surface_new_popup(struct wl_listener *listener, void *data) {
+    // A popup, such as a menu bar's menu, once the layer shell made it the
+    // surface's.
+    struct cwl_layer_surface *surface = wl_container_of(listener, surface, new_popup);
+    cwl_popup_create(surface->server, data, surface->scene->tree);
 }
 
 void cwl_handle_new_layer_surface(struct wl_listener *listener, void *data) {
@@ -96,6 +104,8 @@ void cwl_handle_new_layer_surface(struct wl_listener *listener, void *data) {
     wl_signal_add(&layer_surface->surface->events.unmap, &surface->unmap);
     surface->commit.notify = layer_surface_commit;
     wl_signal_add(&layer_surface->surface->events.commit, &surface->commit);
+    surface->new_popup.notify = layer_surface_new_popup;
+    wl_signal_add(&layer_surface->events.new_popup, &surface->new_popup);
     surface->destroy.notify = layer_surface_destroy;
     wl_signal_add(&layer_surface->events.destroy, &surface->destroy);
 
