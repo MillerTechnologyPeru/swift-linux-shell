@@ -17,9 +17,8 @@ case "$1" in
     exec CacaoWindowServer -s "\"$0\" --start-shell" "$@"
     ;;
 --start-shell)
-    # xdg-desktop-portal and D-Bus activated services need the session's
-    # Wayland display and desktop name.
-    dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
+    # The window server has already given D-Bus activated services the
+    # session's Wayland display and desktop name.
     CacaoSettings &
     # The desktop's wallpaper and icons, from Files (swift-linux-core-apps).
     files --desktop &
