@@ -51,6 +51,24 @@ do {
     exit(EXIT_FAILURE)
 }
 
+if server.hasSeatSession {
+    // Services D-Bus starts, such as xdg-desktop-portal, need the session's
+    // display and desktop name before anything asks for them, as the title
+    // bars' appearance does next.
+    let update = Process()
+    update.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    update.arguments = ["dbus-update-activation-environment", "--systemd", "WAYLAND_DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE"]
+    do {
+        try update.run()
+        update.waitUntilExit()
+    } catch {
+        log("Could not update the D-Bus activation environment: \(error)")
+    }
+}
+
+// The desktop's look, for the title bars the window server draws.
+server.followAppearance()
+
 if let startupCommand {
     // WAYLAND_DISPLAY is already set, so the command connects to this server.
     let process = Process()

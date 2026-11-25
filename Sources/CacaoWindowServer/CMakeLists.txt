@@ -11,5 +11,6 @@ target_link_libraries(CacaoWindowServer PRIVATE
   # Title bars, drawn as Cacao draws its own.
   CacaoTokens
   CacaoRender
+  CacaoDBus
   Silica
   SilicaCairo)

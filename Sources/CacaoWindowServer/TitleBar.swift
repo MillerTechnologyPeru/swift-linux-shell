@@ -32,8 +32,9 @@ struct TitleBar: Equatable {
     /// The style the title bar is drawn in.
     nonisolated(unsafe) static var tokens = StyleTokens()
 
-    /// The buttons and the end they're at.
-    static let layout = WindowButtonLayout.standard
+    /// The buttons and the end they're at, as the desktop's settings have
+    /// them.
+    nonisolated(unsafe) static var layout = WindowButtonLayout.standard
 
     static var height: Int {
         Int(tokens.metrics.titleBarHeight.rounded())
