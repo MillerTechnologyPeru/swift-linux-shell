@@ -119,6 +119,60 @@ struct StatusNotifierTests {
         await shell.close()
     }
 
+    /// A title the app changes, answered slowly the first time it's read,
+    /// with the title it had when the read began.
+    actor SlowTitle {
+        var title = "Starting"
+        var reads = 0
+        func read() async -> String {
+            reads += 1
+            let value = title
+            if reads == 1 {
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            return value
+        }
+        func set(_ title: String) { self.title = title }
+    }
+
+    @Test func changeDuringTheFirstReadIsSeen() async throws {
+        let bus = try await PrivateBus.start()
+        defer { bus.stop() }
+        let shell = try await DBusConnection.connect(to: bus.address)
+        let watcher = StatusNotifierWatcher(connection: shell)
+        #expect(try await watcher.start())
+        let host = StatusNotifierHost(connection: shell)
+        let updates = try await host.start()
+
+        let app = try await DBusConnection.connect(to: bus.address)
+        let title = SlowTitle()
+        let item = DBusInterfaceImplementation(
+            name: ShellDBus.statusNotifierItemInterface,
+            properties: [
+                .init(name: "Id", type: .string) { .string("slow-item") },
+                .init(name: "Title", type: .string) { .string(await title.read()) },
+                .init(name: "Status", type: .string) { .string("Active") },
+            ]
+        )
+        let path = DBusObjectPath(rawValue: "/StatusNotifierItem")!
+        await app.export(DBusExportedObject([item]), at: path)
+        try await register(app, service: path.rawValue)
+
+        // While the host's first read is answered, the app retitles the
+        // item and says so: the host reads it again.
+        try await Task.sleep(for: .milliseconds(150))
+        await title.set("Ready")
+        try await app.emit(DBusMessage.Signal(path: path, interface: ShellDBus.statusNotifierItemInterface,
+                                              name: DBusMember(rawValue: "NewTitle")!))
+        let items = await next(updates) { $0.contains { $0.title == "Ready" } }
+        #expect(items != nil)
+
+        await app.close()
+        await host.stop()
+        await watcher.stop()
+        await shell.close()
+    }
+
     @Test func secondWatcherDefers() async throws {
         let bus = try await PrivateBus.start()
         defer { bus.stop() }
