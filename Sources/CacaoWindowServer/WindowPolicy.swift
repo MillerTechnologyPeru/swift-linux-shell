@@ -42,6 +42,34 @@ protocol WindowPolicy: AnyObject {
     /// The dock, or another app through xdg-activation, asked for the
     /// window to come forward.
     func windowRequestedActivation(_ window: Window, server: WindowServer)
+
+    /// A key was pressed with Control, Alt or Super held. Returns whether
+    /// the policy took it; otherwise it goes to the focused window.
+    func shortcut(_ shortcut: Shortcut, server: WindowServer) -> Bool
+}
+
+/// A key pressed with modifiers, for the shell's own shortcuts.
+struct Shortcut: Equatable {
+
+    /// The XKB keysym, in lowercase.
+    var keysym: UInt32
+
+    var modifiers: CWLModifiers
+
+    /// Super, the key Mac apps use as Command.
+    var hasSuper: Bool { modifiers.rawValue & CWLModifierLogo.rawValue != 0 }
+
+    var hasShift: Bool { modifiers.rawValue & CWLModifierShift.rawValue != 0 }
+
+    var hasControl: Bool { modifiers.rawValue & CWLModifierControl.rawValue != 0 }
+
+    var hasAlt: Bool { modifiers.rawValue & CWLModifierAlt.rawValue != 0 }
+
+    /// Whether this is a letter with exactly the given modifiers held.
+    func matches(_ letter: Character, super isSuper: Bool = false, shift: Bool = false, control: Bool = false, alt: Bool = false) -> Bool {
+        letter.asciiValue.map(UInt32.init) == keysym
+            && hasSuper == isSuper && hasShift == shift && hasControl == control && hasAlt == alt
+    }
 }
 
 @MainActor

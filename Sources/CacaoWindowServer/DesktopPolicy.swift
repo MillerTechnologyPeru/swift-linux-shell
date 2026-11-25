@@ -36,6 +36,18 @@ final class DesktopPolicy: WindowPolicy {
         focusNext(after: window, server: server)
     }
 
+    func shortcut(_ shortcut: Shortcut, server: WindowServer) -> Bool {
+        // Super is Command, and Command-Shift-Q logs out. With no dialog to
+        // confirm it yet, it ends the session at once; apps get their
+        // windows closed with the display.
+        if shortcut.matches("q", super: true, shift: true) {
+            log("Logging out")
+            server.terminate()
+            return true
+        }
+        return false
+    }
+
     func windowClicked(_ window: Window, server: WindowServer) {
         server.focus(window)
     }
