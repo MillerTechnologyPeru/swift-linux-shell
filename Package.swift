@@ -189,7 +189,11 @@ var compositorTargets: [Target] {
             name: "CacaoWindowServer",
             dependencies: [
                 "CacaoShellKit",
-                "CWLRoots"
+                "CWLRoots",
+                .product(
+                    name: "DBus",
+                    package: "DBus"
+                )
             ],
             exclude: ["CMakeLists.txt"]
         ),
