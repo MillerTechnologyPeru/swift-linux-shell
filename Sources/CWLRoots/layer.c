@@ -161,16 +161,23 @@ void cwl_output_arrange_layers(struct cwl_output *output) {
     wlr_output_layout_get_box(output->server->output_layout, output->wlr_output, &full_area);
     struct wlr_box usable_area = full_area;
 
-    // Overlay first, so the menu bar on the top layer and the dock reserve
-    // their space before the desktop on the background layer is placed.
-    for (int layer = CWL_LAYER_COUNT - 1; layer >= 0; layer--) {
-        struct cwl_layer_surface *surface;
-        wl_list_for_each(surface, &output->layer_surfaces, link) {
-            struct wlr_layer_surface_v1 *layer_surface = surface->layer_surface;
-            if ((int)layer_surface->current.layer != layer || !layer_surface->initialized) {
-                continue;
+    // Surfaces that reserve space go first, on every layer, such as the
+    // menu bar and the dock; then the rest, which stay out of that space
+    // (an exclusive zone of 0) or ignore it (-1), as layer-shell has it,
+    // such as notification banners and the desktop. Within each pass,
+    // overlay first.
+    for (int pass = 0; pass < 2; pass++) {
+        bool reserving = pass == 0;
+        for (int layer = CWL_LAYER_COUNT - 1; layer >= 0; layer--) {
+            struct cwl_layer_surface *surface;
+            wl_list_for_each(surface, &output->layer_surfaces, link) {
+                struct wlr_layer_surface_v1 *layer_surface = surface->layer_surface;
+                if ((int)layer_surface->current.layer != layer || !layer_surface->initialized ||
+                    (layer_surface->current.exclusive_zone > 0) != reserving) {
+                    continue;
+                }
+                wlr_scene_layer_surface_v1_configure(surface->scene, &full_area, &usable_area);
             }
-            wlr_scene_layer_surface_v1_configure(surface->scene, &full_area, &usable_area);
         }
     }
 
