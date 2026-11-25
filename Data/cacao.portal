@@ -1,3 +1,6 @@
 [portal]
 DBusName=org.freedesktop.impl.portal.desktop.cacao
 Interfaces=org.freedesktop.impl.portal.Settings;
+# For xdg-desktop-portal before 1.18 and other readers of .portal files;
+# newer ones choose backends with cacao-portals.conf.
+UseIn=Cacao
