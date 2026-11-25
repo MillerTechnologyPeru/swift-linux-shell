@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
 Name=Cacao
-Comment=The Cacao desktop
+Comment=The Cacao desktop, on CacaoWindowServer
 Exec=cacao-session
 DesktopNames=Cacao
