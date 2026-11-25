@@ -145,9 +145,10 @@ final class Window {
         titleBar != nil
     }
 
-    /// Draws the title bar again if anything it shows changed, adds it if
-    /// the window came to want one, or takes it away.
-    func updateTitleBar() {
+    /// Draws the title bar again if anything it shows changed, or with
+    /// `redraw` when its style did; adds it if the window came to want one,
+    /// or takes it away.
+    func updateTitleBar(redraw: Bool = false) {
         guard isMapped, !isFullscreen, cwl_toplevel_wants_title_bar(toplevel) else {
             if titleBar != nil {
                 titleBar = nil
@@ -162,7 +163,7 @@ final class Window {
             isMaximized: isMaximized,
             pressedButton: pressedTitleBarButton
         )
-        guard bar != titleBar, let image = bar.draw() else { return }
+        guard redraw || bar != titleBar, let image = bar.draw() else { return }
         titleBar = bar
         image.data.withUnsafeBytes { pixels in
             cwl_toplevel_set_title_bar(toplevel, pixels.baseAddress, Int32(image.width), Int32(image.height), Int32(image.bytesPerRow))
