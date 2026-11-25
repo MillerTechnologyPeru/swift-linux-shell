@@ -2,13 +2,20 @@
 # activation, and the session that runs sway until CacaoWindowServer
 # replaces it.
 
-configure_file(org.freedesktop.impl.portal.desktop.cacao.service.in
-  ${CMAKE_CURRENT_BINARY_DIR}/org.freedesktop.impl.portal.desktop.cacao.service
-  @ONLY)
+# The settings service starts on demand under either name: the portal
+# backend's, when xdg-desktop-portal first needs it, and its own, when the
+# Settings app or the shell changes a setting.
+foreach(service
+    org.freedesktop.impl.portal.desktop.cacao
+    org.pureswift.Cacao.Settings)
+  configure_file(${service}.service.in
+    ${CMAKE_CURRENT_BINARY_DIR}/${service}.service
+    @ONLY)
+  install(FILES
+      ${CMAKE_CURRENT_BINARY_DIR}/${service}.service
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
+endforeach()
 
-install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/org.freedesktop.impl.portal.desktop.cacao.service
-  DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
 install(FILES
     cacao.portal
   DESTINATION ${CMAKE_INSTALL_DATADIR}/xdg-desktop-portal/portals)
