@@ -6,12 +6,8 @@
 //  and fades into its minimize target in the dock, and grows back out of it
 //  when it's restored.
 //
-//  The scene API can't scale a tree, so every node of the window's tree is
-//  scaled about the window's origin instead: each node's position, and each
-//  buffer's size. Positions are relative to their parents, so scaling all
-//  of them by the same factor scales the whole window, its shadow and title
-//  bar included. When the animation ends, every node gets back exactly what
-//  it had.
+//  The window is drawn smaller and fainter with a snapshot (snapshot.c),
+//  and when the animation ends every node gets back exactly what it had.
 //
 
 #include "CWLRoots.h"
@@ -21,7 +17,6 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include "server.h"
 
 /// How long the animation takes, in milliseconds.
@@ -33,15 +28,6 @@ static const int animation_interval = 16;
 /// How faint the window is at the target.
 static const float animation_end_opacity = 0.15f;
 
-/// What a node had before the animation.
-struct cwl_node_snapshot {
-    struct wlr_scene_node *node;
-    int x, y;
-    /// For buffers: the size they're drawn at, and their opacity.
-    int width, height;
-    float opacity;
-};
-
 struct cwl_animation {
     CWLToplevel *toplevel;
     /// Minimizing: from the window to the target; restoring: back.
@@ -50,116 +36,25 @@ struct cwl_animation {
     /// as long however fast frames come.
     int64_t start;
     struct wl_event_source *timer;
-    /// The window tree's own position.
-    int root_x, root_y;
-    /// The frame, in the tree's coordinates.
-    struct wlr_box frame;
+    /// The window as it was, and where its frame was.
+    struct cwl_snapshot snapshot;
+    struct wlr_box from;
     /// The target, in the layout's coordinates.
     struct wlr_box target;
-    struct cwl_node_snapshot *nodes;
-    size_t count, capacity;
 };
-
-// MARK: Snapshots
-
-static void snapshot_add(struct cwl_animation *animation, struct wlr_scene_node *node) {
-    if (animation->count == animation->capacity) {
-        size_t capacity = animation->capacity ? animation->capacity * 2 : 32;
-        struct cwl_node_snapshot *nodes = realloc(animation->nodes, capacity * sizeof(*nodes));
-        if (!nodes) {
-            return;
-        }
-        animation->nodes = nodes;
-        animation->capacity = capacity;
-    }
-    struct cwl_node_snapshot *snapshot = &animation->nodes[animation->count++];
-    *snapshot = (struct cwl_node_snapshot){ .node = node, .x = node->x, .y = node->y, .opacity = 1 };
-    if (node->type == WLR_SCENE_NODE_BUFFER) {
-        struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(node);
-        snapshot->width = buffer->dst_width;
-        snapshot->height = buffer->dst_height;
-        // Zero means the buffer's own size, which the scale needs.
-        if ((snapshot->width == 0 || snapshot->height == 0) && buffer->buffer) {
-            snapshot->width = buffer->buffer->width;
-            snapshot->height = buffer->buffer->height;
-        }
-        snapshot->opacity = buffer->opacity;
-    }
-    if (node->type == WLR_SCENE_NODE_TREE) {
-        struct wlr_scene_tree *tree = wlr_scene_tree_from_node(node);
-        struct wlr_scene_node *child;
-        wl_list_for_each(child, &tree->children, link) {
-            snapshot_add(animation, child);
-        }
-    }
-}
-
-/// Gives every node back what it had.
-static void snapshot_restore(struct cwl_animation *animation) {
-    for (size_t i = 0; i < animation->count; i++) {
-        struct cwl_node_snapshot *snapshot = &animation->nodes[i];
-        wlr_scene_node_set_position(snapshot->node, snapshot->x, snapshot->y);
-        if (snapshot->node->type == WLR_SCENE_NODE_BUFFER) {
-            struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(snapshot->node);
-            wlr_scene_buffer_set_dest_size(buffer, snapshot->width, snapshot->height);
-            wlr_scene_buffer_set_opacity(buffer, snapshot->opacity);
-        }
-    }
-    wlr_scene_node_set_position(&animation->toplevel->scene_tree->node, animation->root_x, animation->root_y);
-}
-
-// MARK: Frames
-
-static int64_t now_ms(void) {
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
-}
 
 /// How far along it is, from 0 to 1.
 static double animation_progress(struct cwl_animation *animation) {
-    return fmin((double)(now_ms() - animation->start) / animation_duration, 1);
-}
-
-/// Eases in and out.
-static double ease(double t) {
-    return t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2;
+    return fmin((double)(cwl_now_ms() - animation->start) / animation_duration, 1);
 }
 
 /// Draws the window at a point of the way to the target: 0 is the window
 /// as it is, 1 at the target.
 static void draw_at(struct cwl_animation *animation, double progress) {
-    double e = ease(progress);
-    struct wlr_box *frame = &animation->frame;
-    struct wlr_box *target = &animation->target;
-    double end_scale = fmin((double)target->width / frame->width, (double)target->height / frame->height);
-    end_scale = fmax(fmin(end_scale, 1), 0.02);
-    double scale = 1 + (end_scale - 1) * e;
-    float fade = (float)(1 + (animation_end_opacity - 1) * e);
-
-    // The frame's center moves from where it is to the target's.
-    double start_x = animation->root_x + frame->x + frame->width / 2.0;
-    double start_y = animation->root_y + frame->y + frame->height / 2.0;
-    double end_x = target->x + target->width / 2.0;
-    double end_y = target->y + target->height / 2.0;
-    double center_x = start_x + (end_x - start_x) * e;
-    double center_y = start_y + (end_y - start_y) * e;
-    wlr_scene_node_set_position(&animation->toplevel->scene_tree->node,
-        (int)lround(center_x - scale * (frame->x + frame->width / 2.0)),
-        (int)lround(center_y - scale * (frame->y + frame->height / 2.0)));
-
-    // Each node about its parent, so the whole tree scales about its origin.
-    for (size_t i = 0; i < animation->count; i++) {
-        struct cwl_node_snapshot *snapshot = &animation->nodes[i];
-        wlr_scene_node_set_position(snapshot->node, (int)lround(snapshot->x * scale), (int)lround(snapshot->y * scale));
-        if (snapshot->node->type == WLR_SCENE_NODE_BUFFER && snapshot->width > 0 && snapshot->height > 0) {
-            struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(snapshot->node);
-            wlr_scene_buffer_set_dest_size(buffer,
-                (int)fmax(1, lround(snapshot->width * scale)),
-                (int)fmax(1, lround(snapshot->height * scale)));
-            wlr_scene_buffer_set_opacity(buffer, snapshot->opacity * fade);
-        }
-    }
+    double e = cwl_ease(progress);
+    cwl_snapshot_draw(&animation->snapshot,
+        cwl_box_mix(animation->from, animation->target, e),
+        (float)(1 + (animation_end_opacity - 1) * e));
 }
 
 static void animation_free(struct cwl_animation *animation) {
@@ -169,7 +64,7 @@ static void animation_free(struct cwl_animation *animation) {
     if (animation->toplevel->animation == animation) {
         animation->toplevel->animation = NULL;
     }
-    free(animation->nodes);
+    cwl_snapshot_finish(&animation->snapshot);
     free(animation);
 }
 
@@ -177,7 +72,7 @@ static void animation_free(struct cwl_animation *animation) {
 static void animation_finish(struct cwl_animation *animation) {
     CWLToplevel *toplevel = animation->toplevel;
     bool minimizing = animation->minimizing;
-    snapshot_restore(animation);
+    cwl_snapshot_restore(&animation->snapshot);
     animation_free(animation);
     if (minimizing) {
         wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
@@ -256,30 +151,22 @@ bool cwl_toplevel_animate_minimize(CWLToplevel *toplevel, bool minimizing) {
     if (!server->effects || !toplevel->mapped) {
         return false;
     }
-    struct wlr_box geometry;
-    wlr_xdg_surface_get_geometry(toplevel->xdg_toplevel->base, &geometry);
-    int height = geometry.height + (toplevel->title_bar ? toplevel->title_bar_height : 0);
-    if (geometry.width <= 0 || height <= 0) {
-        return false;
-    }
     struct cwl_animation *animation = calloc(1, sizeof(*animation));
     if (!animation) {
         return false;
     }
+    if (!cwl_snapshot_take(&animation->snapshot, toplevel)) {
+        free(animation);
+        return false;
+    }
     animation->toplevel = toplevel;
     animation->minimizing = minimizing;
-    animation->start = now_ms();
-    animation->root_x = toplevel->scene_tree->node.x;
-    animation->root_y = toplevel->scene_tree->node.y;
-    animation->frame = (struct wlr_box){ geometry.x, geometry.y, geometry.width, height };
+    animation->start = cwl_now_ms();
+    animation->from = cwl_snapshot_frame_box(&animation->snapshot);
     animation->target = minimize_target(toplevel);
-    struct wlr_scene_node *child;
-    wl_list_for_each(child, &toplevel->scene_tree->children, link) {
-        snapshot_add(animation, child);
-    }
     animation->timer = wl_event_loop_add_timer(wl_display_get_event_loop(server->display), animation_tick, animation);
     if (!animation->timer) {
-        free(animation->nodes);
+        cwl_snapshot_finish(&animation->snapshot);
         free(animation);
         return false;
     }
