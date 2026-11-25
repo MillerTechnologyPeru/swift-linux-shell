@@ -17,6 +17,7 @@
 #include <linux/input-event-codes.h>
 #include <wlr/version.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
+#include <wlr/xcursor.h>
 #include "server.h"
 
 const char *cwl_wlroots_version(void) {
@@ -338,7 +339,12 @@ static void process_cursor_motion(CWLServer *server, uint32_t time) {
     double sx, sy;
     struct wlr_surface *surface = surface_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
     if (!surface) {
-        wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+        // Around a window with the compositor's title bar, the cursor shows
+        // which way it resizes.
+        uint32_t edges;
+        const char *cursor = cwl_frame_border_at(server, server->cursor->x, server->cursor->y, &edges)
+            ? wlr_xcursor_get_resize_name(edges) : "default";
+        wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, cursor);
         wlr_seat_pointer_clear_focus(server->seat);
         return;
     }
@@ -374,6 +380,19 @@ static void cursor_button(struct wl_listener *listener, void *data) {
             cwl_title_bar_notify_button(server, pressed, false);
         }
         wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
+        return;
+    }
+    // Just outside a window with the compositor's title bar, the press
+    // resizes it, as the window would from its own edges.
+    uint32_t border_edges;
+    CWLToplevel *border_owner = cwl_frame_border_at(server, server->cursor->x, server->cursor->y, &border_edges);
+    if (border_owner && event->button == BTN_LEFT) {
+        if (server->callbacks.toplevel_clicked) {
+            server->callbacks.toplevel_clicked(server->callbacks.context, border_owner);
+        }
+        if (server->callbacks.toplevel_requested_resize) {
+            server->callbacks.toplevel_requested_resize(server->callbacks.context, border_owner, (CWLEdges)border_edges);
+        }
         return;
     }
     // A title bar the compositor draws takes the press itself: Swift moves
@@ -670,6 +689,10 @@ CWLBox cwl_server_usable_area(CWLServer *server) {
     return server->usable_area;
 }
 
+bool cwl_server_has_seat_session(CWLServer *server) {
+    return server->session != NULL;
+}
+
 CWLBox cwl_server_output_box(CWLServer *server) {
     if (wl_list_empty(&server->outputs)) {
         return (CWLBox){ 0 };
@@ -717,6 +740,7 @@ void cwl_server_destroy(CWLServer *server) {}
 void cwl_server_wake(CWLServer *server) {}
 void cwl_toplevel_kill(CWLToplevel *toplevel) {}
 CWLBox cwl_server_usable_area(CWLServer *server) { return (CWLBox){ 0 }; }
+bool cwl_server_has_seat_session(CWLServer *server) { return false; }
 CWLToplevel *cwl_server_focused_toplevel(CWLServer *server) { return NULL; }
 CWLBox cwl_server_output_box(CWLServer *server) { return (CWLBox){ 0 }; }
 void cwl_server_clear_focus(CWLServer *server) {}
