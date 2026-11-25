@@ -94,6 +94,15 @@ struct CWLServer {
     double grab_x, grab_y;
     struct wlr_box grab_box;
     uint32_t resize_edges;
+    /// The window whose title bar the left button went down on, until it
+    /// comes up.
+    CWLToplevel *title_bar_pressed;
+    /// The window that's activated, which has the keyboard unless a layer
+    /// surface took it.
+    CWLToplevel *focused_toplevel;
+    /// A layer surface on the top or overlay layer that took the keyboard
+    /// for as long as it's mapped, such as a dialog or a lock screen.
+    struct wlr_layer_surface_v1 *exclusive_layer;
 
     CWLBox usable_area;
     const char *socket;
@@ -114,6 +123,9 @@ struct CWLServer {
     struct wl_listener new_decoration;
     struct wl_listener new_virtual_pointer;
     struct wl_listener request_activate;
+    /// Written from any thread to have the event loop call `woken`.
+    int wake_fd;
+    struct wl_event_source *wake_source;
 
     /// Whether `cwl_protocols_init` added its listeners.
     bool protocols_ready;
@@ -136,7 +148,16 @@ struct CWLToplevel {
     struct wl_list link;
     CWLServer *server;
     struct wlr_xdg_toplevel *xdg_toplevel;
+    /// The window's frame: its title bar, if the compositor draws one, and
+    /// its content.
     struct wlr_scene_tree *scene_tree;
+    /// The xdg surface and its subsurfaces and popups, below the title bar.
+    struct wlr_scene_tree *content_tree;
+    /// The title bar the compositor draws, or NULL.
+    struct wlr_scene_buffer *title_bar;
+    int title_bar_height;
+    /// The content's size at the last commit, to tell when it changes.
+    int content_width, content_height;
     bool mapped;
     struct wl_listener map;
     struct wl_listener unmap;
@@ -217,8 +238,36 @@ void cwl_handle_new_popup(struct wl_listener *listener, void *data);
 /// Shows a popup in its parent's scene tree.
 void cwl_popup_create(CWLServer *server, struct wlr_xdg_popup *xdg_popup, struct wlr_scene_tree *parent_tree);
 
+// MARK: titlebar.c
+
+/// Where the window's visible content starts in its frame: below the title
+/// bar, if it has one.
+void cwl_toplevel_content_offset(CWLToplevel *toplevel, int *x, int *y);
+
+/// Places the title bar and the content in the window's frame.
+void cwl_toplevel_layout_frame(CWLToplevel *toplevel);
+
+/// Tells Swift the title bar needs drawing again, or taking away.
+void cwl_toplevel_title_bar_changed(CWLToplevel *toplevel);
+
+/// The window whose title bar is at a point in the layout, and the point
+/// in the title bar's coordinates.
+CWLToplevel *cwl_title_bar_at(CWLServer *server, double lx, double ly, double *x, double *y);
+
+/// Tells Swift the left button went down or up on a window's title bar.
+void cwl_title_bar_notify_button(CWLServer *server, CWLToplevel *toplevel, bool pressed);
+
 /// Tells clients which input devices the seat has.
 void cwl_server_update_capabilities(CWLServer *server);
+
+/// Gives the keyboard to a surface, with the keys held down.
+void cwl_server_keyboard_enter(CWLServer *server, struct wlr_surface *surface);
+
+// MARK: layer.c
+
+/// Gives the keyboard to the topmost layer surface that asks for it alone,
+/// or, when none does any longer, back to the focused window.
+void cwl_server_update_layer_focus(CWLServer *server);
 
 /// Ends an interactive move or resize, as when its window goes.
 void cwl_server_end_grab(CWLServer *server);
