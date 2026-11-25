@@ -507,6 +507,7 @@ CWLServer *cwl_server_create(CWLServerCallbacks callbacks) {
     CWLServer *server = calloc(1, sizeof(*server));
     server->callbacks = callbacks;
     server->wake_fd = -1;
+    server->effects = true;
     wl_list_init(&server->outputs);
     wl_list_init(&server->toplevels);
     wl_list_init(&server->keyboards);
@@ -675,6 +676,9 @@ void cwl_server_destroy(CWLServer *server) {
     }
     if (server->wake_source) {
         wl_event_source_remove(server->wake_source);
+    }
+    if (server->shadow_image) {
+        wlr_buffer_drop(server->shadow_image);
     }
     if (server->wake_fd >= 0) {
         close(server->wake_fd);
