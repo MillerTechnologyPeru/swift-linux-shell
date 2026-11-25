@@ -5,6 +5,7 @@
 
 import CWLRoots
 import CacaoShellKit
+import Foundation
 
 /// Where windows go and which one has focus. Each form factor has its own
 /// policy, so tablet and phone modes add a policy instead of changing the
@@ -46,6 +47,14 @@ protocol WindowPolicy: AnyObject {
     /// A key was pressed with Control, Alt or Super held. Returns whether
     /// the policy took it; otherwise it goes to the focused window.
     func shortcut(_ shortcut: Shortcut, server: WindowServer) -> Bool
+
+    /// The left button went down on the title bar the compositor draws for
+    /// the window, at a point in the title bar.
+    func windowTitleBarPressed(_ window: Window, at point: CGPoint, server: WindowServer)
+
+    /// The left button came up after going down on the window's title bar,
+    /// at a point in the title bar, which may be outside it.
+    func windowTitleBarReleased(_ window: Window, at point: CGPoint, server: WindowServer)
 }
 
 /// A key pressed with modifiers, for the shell's own shortcuts.
@@ -67,9 +76,18 @@ struct Shortcut: Equatable {
 
     /// Whether this is a letter with exactly the given modifiers held.
     func matches(_ letter: Character, super isSuper: Bool = false, shift: Bool = false, control: Bool = false, alt: Bool = false) -> Bool {
-        letter.asciiValue.map(UInt32.init) == keysym
+        guard let ascii = letter.asciiValue else { return false }
+        return matches(keysym: UInt32(ascii), super: isSuper, shift: shift, control: control, alt: alt)
+    }
+
+    /// Whether this is a key with exactly the given modifiers held.
+    func matches(keysym: UInt32, super isSuper: Bool = false, shift: Bool = false, control: Bool = false, alt: Bool = false) -> Bool {
+        self.keysym == keysym
             && hasSuper == isSuper && hasShift == shift && hasControl == control && hasAlt == alt
     }
+
+    /// XKB's Escape.
+    static let escape: UInt32 = 0xff1b
 }
 
 @MainActor
