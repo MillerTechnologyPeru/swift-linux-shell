@@ -369,7 +369,27 @@ final class WindowServer {
 
     /// The mapped windows that aren't minimized, most recently focused first.
     var visibleWindows: [Window] {
-        mappedWindows.filter(\.isVisible)
+        let space = currentSpace
+        return mappedWindows.filter { $0.isVisible && $0.space == space }
+    }
+
+    // MARK: Spaces
+
+    /// How many spaces there are.
+    static var spaceCount: Int {
+        Int(cwl_server_space_count())
+    }
+
+    /// The space shown.
+    var currentSpace: Int {
+        server.map { Int(cwl_server_current_space($0)) } ?? 0
+    }
+
+    /// Shows another space, sliding to it when effects are on.
+    func showSpace(_ space: Int) {
+        guard let server, space != currentSpace else { return }
+        log("Space \(space + 1)")
+        cwl_server_show_space(server, Int32(space))
     }
 
     /// The whole of the screen, for full-screen windows.
