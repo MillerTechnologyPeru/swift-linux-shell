@@ -88,6 +88,10 @@ struct Shortcut: Equatable {
 
     /// XKB's Escape.
     static let escape: UInt32 = 0xff1b
+
+    /// XKB's Left and Right arrows.
+    static let left: UInt32 = 0xff51
+    static let right: UInt32 = 0xff53
 }
 
 @MainActor
