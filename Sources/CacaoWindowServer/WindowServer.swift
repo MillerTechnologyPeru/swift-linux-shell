@@ -7,6 +7,7 @@ import CWLRoots
 import CacaoDBus
 import CacaoShellKit
 import CacaoTokens
+import DBus
 import Foundation
 
 /// The compositor: the wlroots shim with window policy in Swift.
@@ -238,6 +239,73 @@ final class WindowServer {
                 WindowServer.current?.appearanceObserver = observer
                 WindowServer.current?.appearanceChanged(started.appearance)
             }
+        }
+    }
+
+    // MARK: Effects
+
+    /// Follows the desktop's effects setting from the settings portal:
+    /// window shadows, for now. Until it's read, effects take the machine's
+    /// default.
+    func followEffects() {
+        if let server {
+            cwl_server_set_effects(server, AppearanceSettings.defaultEffects)
+        }
+        let queue = mainQueue
+        Task.detached {
+            guard let connection = try? await DBusConnection.connect(to: .session) else { return }
+            // Heard from before the first read, so no change is missed.
+            let changes = try? await connection.signals(
+                interface: ShellDBus.portalSettingsInterface,
+                member: DBusMember(rawValue: "SettingChanged")!,
+                path: ShellDBus.portalPath
+            )
+            if let effects = await Self.readEffects(on: connection) {
+                queue.async { WindowServer.current?.setEffects(effects) }
+            }
+            guard let changes else { return }
+            for await message in changes {
+                guard message.arguments.count == 3,
+                      case let .string(namespace) = message.arguments[0],
+                      case let .string(key) = message.arguments[1],
+                      namespace == AppearanceSettings.cacaoNamespace, key == "effects",
+                      let effects = Self.bool(message.arguments[2])
+                else { continue }
+                queue.async { WindowServer.current?.setEffects(effects) }
+            }
+        }
+    }
+
+    private func setEffects(_ effects: Bool) {
+        guard let server else { return }
+        log("Effects \(effects ? "on" : "off")")
+        cwl_server_set_effects(server, effects)
+    }
+
+    /// The effects setting through the portal: `ReadOne`, or `Read` from
+    /// older portals.
+    private nonisolated static func readEffects(on connection: DBusConnection) async -> Bool? {
+        let arguments: [DBusMessageArgument] = [.string(AppearanceSettings.cacaoNamespace), .string("effects")]
+        for method in ["ReadOne", "Read"] {
+            if let reply = try? await connection.callMethod(
+                destination: ShellDBus.portalName,
+                path: ShellDBus.portalPath,
+                interface: ShellDBus.portalSettingsInterface,
+                method: DBusMember(rawValue: method)!,
+                arguments: arguments
+            ), let value = reply.first.flatMap(bool) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    /// A boolean, inside any number of variants.
+    private nonisolated static func bool(_ argument: DBusMessageArgument) -> Bool? {
+        switch argument {
+        case let .boolean(value): value
+        case let .variant(variant): bool(variant.element)
+        default: nil
         }
     }
 
