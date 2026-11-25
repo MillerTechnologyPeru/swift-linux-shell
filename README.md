@@ -31,7 +31,7 @@ swift build
 
 SDL3 is needed for the menu bar and dock, as for Cacao. One wlroots release is pinned: 0.18.
 
-Until `CacaoWindowServer` replaces it, sway runs the default session with `Data/sway/config`. The session on `CacaoWindowServer` has its own entry, Cacao (CacaoWindowServer), which runs `cacao-session --window-server`. In it, Control-Alt-F1 to F12 switch VTs, and Super-Shift-Q logs out.
+Until `CacaoWindowServer` replaces it, sway runs the default session with `Data/sway/config`. The session on `CacaoWindowServer` has its own entry, Cacao (CacaoWindowServer), which runs `cacao-session --window-server`. In it, Control-Alt-F1 to F12 switch VTs. The session's shortcuts are the Mac's, with Super as Command: Super-Shift-Q asks to log out, Super-Alt-Shift-Q logs out without asking, and Super-Alt-Escape opens Force Quit. The menu bar's system menu has the same actions, and Sleep, Restart and Shut Down.
 
 The compositor can also be run nested in another Wayland or X11 session:
 
