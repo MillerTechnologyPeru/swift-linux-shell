@@ -135,6 +135,62 @@ void cwl_toplevel_title_bar_changed(CWLToplevel *toplevel) {
     }
 }
 
+// MARK: Resizing
+
+/// How far outside a frame the pointer resizes it, in pixels.
+static const int resize_border = 8;
+
+/// Whether a scene node is drawn below the windows: on the background or
+/// bottom layer, such as the desktop.
+static bool is_below_windows(CWLServer *server, struct wlr_scene_node *node) {
+    while (node && node->parent && node->parent != &server->scene->tree) {
+        node = &node->parent->node;
+    }
+    return node == &server->layers[ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND]->node ||
+           node == &server->layers[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM]->node;
+}
+
+CWLToplevel *cwl_frame_border_at(CWLServer *server, double lx, double ly, uint32_t *edges) {
+    // Nothing of a window or of the shell may be at the point: only the
+    // desktop or nothing at all.
+    double nx, ny;
+    struct wlr_scene_node *node = wlr_scene_node_at(&server->scene->tree.node, lx, ly, &nx, &ny);
+    if (node && !is_below_windows(server, node)) {
+        return NULL;
+    }
+    // The topmost window whose border is there: the list is in stacking
+    // order, the most recently raised first.
+    CWLToplevel *toplevel;
+    wl_list_for_each(toplevel, &server->toplevels, link) {
+        struct wlr_xdg_toplevel *xdg = toplevel->xdg_toplevel;
+        if (!toplevel->mapped || !toplevel->title_bar || !toplevel->scene_tree->node.enabled ||
+            xdg->current.maximized || xdg->current.fullscreen) {
+            continue;
+        }
+        int x, y;
+        wlr_scene_node_coords(&toplevel->title_bar->node, &x, &y);
+        struct wlr_box geometry;
+        wlr_xdg_surface_get_geometry(xdg->base, &geometry);
+        int width = geometry.width;
+        int height = geometry.height + toplevel->title_bar_height;
+        if (lx < x - resize_border || lx >= x + width + resize_border ||
+            ly < y - resize_border || ly >= y + height + resize_border) {
+            continue;
+        }
+        uint32_t found = WLR_EDGE_NONE;
+        if (lx < x) found |= WLR_EDGE_LEFT;
+        if (lx >= x + width) found |= WLR_EDGE_RIGHT;
+        if (ly < y) found |= WLR_EDGE_TOP;
+        if (ly >= y + height) found |= WLR_EDGE_BOTTOM;
+        if (found == WLR_EDGE_NONE) {
+            return NULL;
+        }
+        *edges = found;
+        return toplevel;
+    }
+    return NULL;
+}
+
 // MARK: Input
 
 CWLToplevel *cwl_title_bar_at(CWLServer *server, double lx, double ly, double *x, double *y) {
