@@ -40,6 +40,15 @@ typedef enum CWLEdges {
     CWLEdgeRight = 1 << 3
 } CWLEdges;
 
+/// Modifier keys held with a shortcut, as wlroots numbers them.
+typedef enum CWLModifiers {
+    CWLModifierShift = 1 << 0,
+    CWLModifierCapsLock = 1 << 1,
+    CWLModifierControl = 1 << 2,
+    CWLModifierAlt = 1 << 3,
+    CWLModifierLogo = 1 << 6
+} CWLModifiers;
+
 /// What the dock asked Exposé to show.
 typedef enum CWLExposeMode {
     CWLExposeModeAllWindows = 0,
@@ -88,6 +97,11 @@ typedef struct CWLServerCallbacks {
     /// The dock, or another app through xdg-activation, asked for the
     /// window to come forward and take focus.
     void (*toplevel_requested_activation)(void *context, CWLToplevel *toplevel);
+    /// A key was pressed with modifiers held, for the shell's own shortcuts.
+    /// `keysym` is the XKB keysym, in lowercase. Return true to take the
+    /// key; false sends it to the focused window. Switching VTs never gets
+    /// here.
+    bool (*key_shortcut)(void *context, CWLModifiers modifiers, uint32_t keysym);
 } CWLServerCallbacks;
 
 /// The version of wlroots the shim was built against.
