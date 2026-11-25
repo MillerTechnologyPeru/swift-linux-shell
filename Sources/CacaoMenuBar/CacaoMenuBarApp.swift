@@ -53,6 +53,20 @@ struct CacaoMenuBarApp: App {
         .defaultSize(width: 400, height: 320)
         .windowLayer(.overlay, edges: [], keyboardInteractivity: .exclusive, namespace: "cacao-dialog")
 
+        // Apps' notifications, below the menu bar at the right; they
+        // never take the keyboard.
+        Window("Notification", id: Notifications.bannerWindowID) {
+            NotificationBanner()
+        }
+        .defaultSize(width: 360, height: 120)
+        .windowLayer(
+            .overlay,
+            edges: [.top, .trailing],
+            margins: EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 12),
+            keyboardInteractivity: .none,
+            namespace: "cacao-notification"
+        )
+
         Window("About This Computer", id: SystemActions.aboutWindowID) {
             AboutView()
         }
@@ -66,6 +80,10 @@ struct MenuBarView: View {
     static let height: CGFloat = 28
 
     @ObservedObject var appMenus = AppMenus.shared
+
+    @Environment(\.openWindow) private var openWindow
+
+    @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
         HStack(spacing: 8) {
@@ -95,6 +113,15 @@ struct MenuBarView: View {
         .font(.system(size: 13))
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height)
+        .onAppear {
+            // The menu bar shows apps' notifications.
+            let notifications = Notifications.shared
+            notifications.openWindow = openWindow
+            notifications.dismissWindow = dismissWindow
+            Task {
+                await notifications.start()
+            }
+        }
     }
 }
 
