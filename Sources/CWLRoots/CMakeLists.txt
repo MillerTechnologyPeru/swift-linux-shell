@@ -14,6 +14,7 @@ add_library(CWLRoots STATIC
   protocols.c
   server.c
   shadow.c
+  spaces.c
   titlebar.c
   toplevel.c)
 

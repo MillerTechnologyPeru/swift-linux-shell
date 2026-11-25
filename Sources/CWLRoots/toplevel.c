@@ -305,7 +305,9 @@ void cwl_handle_new_toplevel(struct wl_listener *listener, void *data) {
     toplevel->xdg_toplevel = xdg_toplevel;
     // The frame holds the content, and a title bar above it when the
     // compositor draws one.
-    toplevel->scene_tree = wlr_scene_tree_create(server->windows);
+    // On the space shown.
+    toplevel->space = server->current_space;
+    toplevel->scene_tree = wlr_scene_tree_create(cwl_toplevel_parent_tree(toplevel));
     toplevel->scene_tree->node.data = toplevel;
     cwl_toplevel_create_shadow(toplevel);
     toplevel->content_tree = wlr_scene_xdg_surface_create(toplevel->scene_tree, xdg_toplevel->base);
@@ -534,9 +536,9 @@ void cwl_toplevel_set_maximized(CWLToplevel *toplevel, bool maximized) {
 }
 
 void cwl_toplevel_set_fullscreen(CWLToplevel *toplevel, bool fullscreen) {
-    CWLServer *server = toplevel->server;
     wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, fullscreen);
-    wlr_scene_node_reparent(&toplevel->scene_tree->node, fullscreen ? server->fullscreen : server->windows);
+    toplevel->fullscreen = fullscreen;
+    wlr_scene_node_reparent(&toplevel->scene_tree->node, cwl_toplevel_parent_tree(toplevel));
     if (toplevel->handle) {
         wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->handle, fullscreen);
     }

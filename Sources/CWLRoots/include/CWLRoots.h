@@ -132,6 +132,23 @@ void cwl_server_run(CWLServer *server);
 /// Makes `cwl_server_run` return.
 void cwl_server_terminate(CWLServer *server);
 
+/// How many spaces there are: desktops of their own windows, one shown at a
+/// time.
+int32_t cwl_server_space_count(void);
+
+/// The space shown.
+int32_t cwl_server_current_space(CWLServer *server);
+
+/// Shows another space, sliding to it when effects are on. New windows
+/// open on the space shown.
+void cwl_server_show_space(CWLServer *server, int32_t space);
+
+/// The space a window is on.
+int32_t cwl_toplevel_space(CWLToplevel *toplevel);
+
+/// Moves a window to another space.
+void cwl_toplevel_set_space(CWLToplevel *toplevel, int32_t space);
+
 /// Turns the desktop's effects on or off: window shadows, for now.
 void cwl_server_set_effects(CWLServer *server, bool effects);
 
