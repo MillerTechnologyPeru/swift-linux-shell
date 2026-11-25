@@ -36,6 +36,9 @@ final class Notifications: ObservableObject {
 
     private var expiry: Task<Void, Never>?
 
+    /// Whether the pointer is on the banner, which keeps it from expiring.
+    private var isHovered = false
+
     private init() { }
 
     /// Serves `org.freedesktop.Notifications`, unless another process does.
@@ -61,6 +64,20 @@ final class Notifications: ObservableObject {
     }
 
     // MARK: From the banner
+
+    /// The pointer moved over the banner or off it. As on a Mac, a banner
+    /// doesn't go away while the pointer is on it, so it can be clicked: its
+    /// time starts over when the pointer leaves.
+    func hover(_ isInside: Bool) {
+        isHovered = isInside
+        guard let current else { return }
+        if isInside {
+            expiry?.cancel()
+            expiry = nil
+        } else {
+            scheduleExpiry(for: current)
+        }
+    }
 
     /// Clicking the banner: its default action, or closing it.
     func click() {
@@ -104,6 +121,9 @@ final class Notifications: ObservableObject {
             if current?.id == id {
                 current = nil
                 expiry?.cancel()
+                // The window closes under the pointer, which may not be
+                // heard leaving.
+                isHovered = false
             } else {
                 waiting.removeAll { $0.id == id }
             }
@@ -126,6 +146,8 @@ final class Notifications: ObservableObject {
 
     private func scheduleExpiry(for notification: DesktopNotification) {
         expiry?.cancel()
+        expiry = nil
+        guard !isHovered else { return }
         let duration: Duration?
         switch notification.expireTimeout {
         case 0:
@@ -171,20 +193,29 @@ struct NotificationBanner: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Text(notification.summary)
-                    .font(.headline)
-                    .lineLimit(1)
-                if !notification.body.isEmpty {
-                    Text(notification.body)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                if !notification.buttons.isEmpty {
-                    HStack {
-                        Spacer()
-                        ForEach(notification.buttons, id: \.key) { action in
-                            Button(action.label) {
-                                notifications.invoke(action.key)
+                // The buttons in a column at the right, as on a Mac, so the
+                // body keeps two lines in the banner's height.
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(notification.summary)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if !notification.body.isEmpty {
+                            Text(notification.body)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    // Its own height, not a share of the banner's with the
+                    // spacer below, which would cut the body to one line.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if !notification.buttons.isEmpty {
+                        VStack(alignment: .trailing, spacing: 6) {
+                            ForEach(notification.buttons, id: \.key) { action in
+                                Button(action.label) {
+                                    notifications.invoke(action.key)
+                                }
                             }
                         }
                     }
@@ -196,6 +227,9 @@ struct NotificationBanner: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 notifications.click()
+            }
+            .onHover { isInside in
+                notifications.hover(isInside)
             }
         }
     }
