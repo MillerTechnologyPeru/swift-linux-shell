@@ -7,6 +7,7 @@ pkg_check_modules(WAYLAND_SERVER REQUIRED IMPORTED_TARGET wayland-server)
 pkg_check_modules(XKBCOMMON REQUIRED IMPORTED_TARGET xkbcommon)
 
 add_library(CWLRoots STATIC
+  animation.c
   appmenu.c
   dock.c
   layer.c

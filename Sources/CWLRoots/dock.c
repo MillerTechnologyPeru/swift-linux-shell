@@ -3,9 +3,9 @@
 //  swift-linux-shell
 //
 //  The compositor's end of the private dock protocol
-//  (Protocols/cacao-dock-unstable-v1.xml). Exposé requests go to Swift.
-//  Minimize targets are accepted and previews always fail until the
-//  minimize animation and previews are built.
+//  (Protocols/cacao-dock-unstable-v1.xml). Exposé requests go to Swift,
+//  and minimize targets to the minimize animation (animation.c). Previews
+//  always fail until they're built.
 //
 
 #include "CWLRoots.h"
@@ -13,6 +13,8 @@
 #if defined(__linux__)
 
 #include <stdlib.h>
+#include <string.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
 #include "server.h"
 #include "cacao-dock-unstable-v1-server-protocol.h"
 
@@ -33,6 +35,69 @@ static const struct zcacao_dock_preview_v1_interface preview_implementation = {
     .copy = preview_copy,
 };
 
+// MARK: Minimize targets
+
+/// Where an app's windows minimize to: a rectangle on a surface of the
+/// dock's, kept while the surface lives.
+struct cwl_minimize_target {
+    struct wl_list link;
+    char *app_id;
+    struct wlr_surface *surface;
+    struct wlr_box box;
+    struct wl_listener surface_destroy;
+};
+
+static void target_free(struct cwl_minimize_target *target) {
+    wl_list_remove(&target->link);
+    wl_list_remove(&target->surface_destroy.link);
+    free(target->app_id);
+    free(target);
+}
+
+static void target_surface_destroy(struct wl_listener *listener, void *data) {
+    struct cwl_minimize_target *target = wl_container_of(listener, target, surface_destroy);
+    target_free(target);
+}
+
+static struct cwl_minimize_target *target_for(CWLServer *server, const char *app_id) {
+    struct cwl_minimize_target *target;
+    wl_list_for_each(target, &server->minimize_targets, link) {
+        if (strcmp(target->app_id, app_id) == 0) {
+            return target;
+        }
+    }
+    return NULL;
+}
+
+bool cwl_dock_minimize_target(CWLServer *server, const char *app_id, struct wlr_box *box) {
+    if (!app_id) {
+        return false;
+    }
+    struct cwl_minimize_target *target = target_for(server, app_id);
+    if (!target) {
+        return false;
+    }
+    // The rectangle is relative to the dock's surface, wherever the
+    // compositor placed it.
+    struct wlr_layer_surface_v1 *layer = wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface_get_root_surface(target->surface));
+    if (!layer || !layer->data) {
+        return false;
+    }
+    int x, y;
+    wlr_scene_node_coords(&((struct wlr_scene_tree *)layer->data)->node, &x, &y);
+    *box = target->box;
+    box->x += x;
+    box->y += y;
+    return box->width > 0 && box->height > 0;
+}
+
+void cwl_dock_finish(CWLServer *server) {
+    struct cwl_minimize_target *target, *next;
+    wl_list_for_each_safe(target, next, &server->minimize_targets, link) {
+        target_free(target);
+    }
+}
+
 // MARK: Manager
 
 static void manager_destroy(struct wl_client *client, struct wl_resource *resource) {
@@ -42,10 +107,31 @@ static void manager_destroy(struct wl_client *client, struct wl_resource *resour
 static void manager_set_minimize_target(struct wl_client *client, struct wl_resource *resource,
                                         const char *app_id, struct wl_resource *surface,
                                         int32_t x, int32_t y, int32_t width, int32_t height) {
+    CWLServer *server = wl_resource_get_user_data(resource);
+    struct cwl_minimize_target *target = target_for(server, app_id);
+    if (target) {
+        target_free(target);
+    }
+    target = calloc(1, sizeof(*target));
+    if (!target || !(target->app_id = strdup(app_id))) {
+        free(target);
+        wl_client_post_no_memory(client);
+        return;
+    }
+    target->surface = wlr_surface_from_resource(surface);
+    target->box = (struct wlr_box){ x, y, width, height };
+    target->surface_destroy.notify = target_surface_destroy;
+    wl_signal_add(&target->surface->events.destroy, &target->surface_destroy);
+    wl_list_insert(&server->minimize_targets, &target->link);
 }
 
 static void manager_unset_minimize_target(struct wl_client *client, struct wl_resource *resource,
                                           const char *app_id) {
+    CWLServer *server = wl_resource_get_user_data(resource);
+    struct cwl_minimize_target *target = target_for(server, app_id);
+    if (target) {
+        target_free(target);
+    }
 }
 
 static void manager_show_expose(struct wl_client *client, struct wl_resource *resource,
