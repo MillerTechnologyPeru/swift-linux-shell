@@ -144,11 +144,31 @@ struct BarMenu: View {
     }
 }
 
+/// The app a menu is read from: told which item is chosen, and when its
+/// menus open and close.
+struct MenuSource {
+
+    let click: @MainActor (DBusMenuItem) -> Void
+
+    let willOpen: @MainActor (DBusMenuItem) -> Void
+
+    let didClose: @MainActor (DBusMenuItem) -> Void
+
+    /// The focused app's menus.
+    @MainActor
+    static var appMenus: MenuSource {
+        let menus = AppMenus.shared
+        return MenuSource(click: menus.click, willOpen: menus.willOpen, didClose: menus.didClose)
+    }
+}
+
 /// A menu's items: buttons, submenus and separators. Its content exists
 /// only while the menu is open, so appearing tells the app it opened.
 struct MenuItems: View {
 
     let menu: DBusMenuItem
+
+    var source: MenuSource = .appMenus
 
     var body: some View {
         ForEach(menu.children.filter(\.isVisible)) { item in
@@ -156,22 +176,22 @@ struct MenuItems: View {
                 Divider()
             } else if item.isSubmenu {
                 Menu {
-                    MenuItems(menu: item)
+                    MenuItems(menu: item, source: source)
                 } label: {
                     MenuItemLabel(item: item)
                 }
                 .disabled(!item.isEnabled)
             } else {
                 Button {
-                    AppMenus.shared.click(item)
+                    source.click(item)
                 } label: {
                     MenuItemLabel(item: item)
                 }
                 .disabled(!item.isEnabled)
             }
         }
-        .onAppear { AppMenus.shared.willOpen(menu) }
-        .onDisappear { AppMenus.shared.didClose(menu) }
+        .onAppear { source.willOpen(menu) }
+        .onDisappear { source.didClose(menu) }
     }
 }
 
@@ -235,6 +255,8 @@ struct StatusArea: View {
             ForEach(statusItems.items) { item in
                 StatusItemButton(item: item)
             }
+            // Items with menus look like the rest of the bar's.
+            .menuStyle(.borderlessButton)
             Image(systemName: "wifi")
             Image(systemName: "speaker.wave.2")
             Clock()
@@ -259,25 +281,51 @@ struct Clock: View {
 }
 
 /// Another app's status item. Until Cacao can look up icon theme names, it
-/// shows the item's name; a click activates it.
+/// shows the item's name. A click opens its menu when the item is a menu,
+/// as a Mac app's status item with a menu is, and activates it otherwise;
+/// an item that isn't a menu but has one opens it as a context menu.
 struct StatusItemButton: View {
 
     let item: StatusItem
 
+    @ObservedObject var statusItems = StatusItems.shared
+
     var body: some View {
-        Button {
-            StatusItems.shared.activate(item)
-        } label: {
-            HStack(spacing: 4) {
-                if item.status == .needsAttention {
-                    Image(systemName: "exclamationmark.circle.fill")
-                }
-                Text(item.displayName)
-                    .lineLimit(1)
+        if let menu = statusItems.menus[item.id], item.itemIsMenu {
+            Menu {
+                MenuItems(menu: menu, source: statusItems.source(for: item))
+            } label: {
+                label
             }
-            .frame(maxWidth: 120)
+            .help(item.toolTip ?? item.displayName)
+        } else if let menu = statusItems.menus[item.id] {
+            button
+                .contextMenu {
+                    MenuItems(menu: menu, source: statusItems.source(for: item))
+                }
+        } else {
+            button
+        }
+    }
+
+    private var button: some View {
+        Button {
+            statusItems.activate(item)
+        } label: {
+            label
         }
         .buttonStyle(.plain)
         .help(item.toolTip ?? item.displayName)
+    }
+
+    private var label: some View {
+        HStack(spacing: 4) {
+            if item.status == .needsAttention {
+                Image(systemName: "exclamationmark.circle.fill")
+            }
+            Text(item.displayName)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: 120)
     }
 }
