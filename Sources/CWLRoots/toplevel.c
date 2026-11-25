@@ -133,6 +133,7 @@ static void toplevel_unmap(struct wl_listener *listener, void *data) {
     if (server->focused_toplevel == toplevel) {
         server->focused_toplevel = NULL;
     }
+    cwl_toplevel_finish_animation(toplevel);
     handle_destroy(toplevel);
     cwl_toplevel_update_shadow(toplevel);
     if (server->callbacks.toplevel_unmapped) {
@@ -172,6 +173,7 @@ static void toplevel_commit(struct wl_listener *listener, void *data) {
     }
     // Its size, or its maximized and fullscreen states, may have changed.
     cwl_toplevel_update_shadow(toplevel);
+    cwl_toplevel_animation_committed(toplevel);
 }
 
 static void toplevel_changed(CWLToplevel *toplevel) {
@@ -273,6 +275,7 @@ static void toplevel_destroy(struct wl_listener *listener, void *data) {
     if (server->focused_toplevel == toplevel) {
         server->focused_toplevel = NULL;
     }
+    cwl_toplevel_cancel_animation(toplevel);
     handle_destroy(toplevel);
     if (server->callbacks.toplevel_destroyed) {
         server->callbacks.toplevel_destroyed(server->callbacks.context, toplevel);
@@ -544,7 +547,10 @@ void cwl_toplevel_set_minimized(CWLToplevel *toplevel, bool minimized) {
     if (minimized && server->grabbed == toplevel) {
         cwl_server_end_grab(server);
     }
-    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, !minimized);
+    // Into the dock and back out, with effects; at once without.
+    if (!cwl_toplevel_animate_minimize(toplevel, minimized)) {
+        wlr_scene_node_set_enabled(&toplevel->scene_tree->node, !minimized);
+    }
     if (toplevel->handle) {
         wlr_foreign_toplevel_handle_v1_set_minimized(toplevel->handle, minimized);
     }
