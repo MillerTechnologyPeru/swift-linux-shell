@@ -50,6 +50,10 @@ let package = Package(
         .package(
             url: "https://github.com/PureSwift/DBus.git",
             branch: "master"
+        ),
+        .package(
+            url: "https://github.com/PureSwift/Silica.git",
+            branch: "master"
         )
     ],
     targets: [
@@ -193,6 +197,23 @@ var compositorTargets: [Target] {
                 .product(
                     name: "DBus",
                     package: "DBus"
+                ),
+                // Title bars, drawn as Cacao draws its own.
+                .product(
+                    name: "CacaoTokens",
+                    package: "Cacao"
+                ),
+                .product(
+                    name: "CacaoRender",
+                    package: "Cacao"
+                ),
+                .product(
+                    name: "Silica",
+                    package: "Silica"
+                ),
+                .product(
+                    name: "SilicaCairo",
+                    package: "Silica"
                 )
             ],
             exclude: ["CMakeLists.txt"]
