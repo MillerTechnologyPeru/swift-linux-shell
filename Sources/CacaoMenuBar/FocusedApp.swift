@@ -4,19 +4,22 @@
 //
 
 import CacaoSDL
+import CacaoShellKit
+import DBus
 import Foundation
 #if os(Linux)
 import CacaoHost
 import CToplevelList
 #endif
 
-/// The app whose window has focus, by its Wayland `app_id`.
+/// The app whose window has focus, by its Wayland `app_id`, and where that
+/// window's menus are when the compositor knows.
 ///
-/// For now it comes from the compositor's wlr-foreign-toplevel-management
-/// window list, which sway serves: the window marked activated. Once
-/// CacaoWindowServer replaces sway, the compositor tells the menu bar the
-/// focused window and its menu address through the appmenu protocol
-/// instead, and this goes away.
+/// Under CacaoWindowServer, focus and the menu address come from the
+/// compositor's `org.pureswift.Cacao.WindowServer1` interface, which takes
+/// the address from the appmenu protocol. Under other compositors, such as
+/// sway, focus comes from the wlr-foreign-toplevel-management window list,
+/// the window marked activated, and the menu is found by `app_id`.
 @MainActor
 final class FocusedApp {
 
@@ -25,14 +28,26 @@ final class FocusedApp {
     /// The focused window's `app_id`, or nil when no window has focus.
     private(set) var appID: String?
 
-    /// Called with the new `app_id` each time focus moves to another app.
-    var onChange: ((String?) -> Void)?
+    /// Where the focused window's menus are, when the compositor says.
+    private(set) var menu: FocusedWindow.Menu?
+
+    /// Called each time focus moves to another app, or to a window of the
+    /// same app with other menus.
+    var onChange: (() -> Void)?
+
+    /// Whether focus comes from the window server rather than the window
+    /// list.
+    private var usesWindowServer = false
+
+    /// The focused window, as the window server last said.
+    private var reportedWindow: FocusedWindow?
+
+    /// The `app_id` and focus of each open window, by its number, from the
+    /// window list. The window list also closes an app's windows.
+    private var windows = [UInt32: (appID: String?, isActivated: Bool)]()
 
     #if os(Linux)
     private var client: OpaquePointer?
-
-    /// The `app_id` and focus of each open window, by its number.
-    private var windows = [UInt32: (appID: String?, isActivated: Bool)]()
     #endif
 
     private init() {
@@ -72,6 +87,46 @@ final class FocusedApp {
         #endif
     }
 
+    /// Follows focus through the window server, when the compositor serves
+    /// its interface; otherwise focus keeps coming from the window list.
+    func useWindowServer(on connection: DBusConnection) async {
+        do {
+            guard try await connection.nameHasOwner(ShellDBus.windowServerName) else {
+                return
+            }
+            // Signals come from the owner's unique name, which the match
+            // has to name. Listen before asking, so no change is missed in
+            // between.
+            let owner = try await connection.getNameOwner(ShellDBus.windowServerName)
+            let changes = try await connection.signals(
+                interface: ShellDBus.windowServerInterface,
+                member: FocusedWindow.focusChanged,
+                sender: owner
+            )
+            let reply = try await connection.callMethod(
+                destination: ShellDBus.windowServerName,
+                path: ShellDBus.windowServerPath,
+                interface: ShellDBus.windowServerInterface,
+                method: FocusedWindow.getFocusedWindow
+            )
+            guard let window = FocusedWindow.parse(reply) else {
+                print("[CacaoMenuBar] The window server's reply wasn't understood")
+                return
+            }
+            print("[CacaoMenuBar] Following focus through the window server")
+            usesWindowServer = true
+            report(window)
+            Task { [weak self] in
+                for await message in changes {
+                    guard let window = FocusedWindow.parse(message.arguments) else { continue }
+                    self?.report(window)
+                }
+            }
+        } catch {
+            print("[CacaoMenuBar] Couldn't follow the window server's focus: \(error)")
+        }
+    }
+
     /// Asks every window of the focused app to close: the default app
     /// menu's Quit, for apps that serve no menu of their own.
     func closeFocusedApp() {
@@ -81,6 +136,11 @@ final class FocusedApp {
             ctl_client_close(client, id)
         }
         #endif
+    }
+
+    private func report(_ window: FocusedWindow?) {
+        reportedWindow = window
+        update()
     }
 
     #if os(Linux)
@@ -94,23 +154,25 @@ final class FocusedApp {
             update()
         }
     }
+    #endif
 
     private func update() {
-        let focused: String?
-        if let activated = windows.values.first(where: \.isActivated) {
-            focused = activated.appID
-        } else if let appID, windows.values.contains(where: { $0.appID == appID }) {
-            // Focus went to no window: to the menu bar itself, when one of
-            // its menus is clicked, or to the desktop. The app keeps the
-            // bar while it has a window open.
-            focused = appID
-        } else {
-            focused = nil
+        var focused: (appID: String, menu: FocusedWindow.Menu?)?
+        if usesWindowServer {
+            focused = reportedWindow.map { ($0.appID, $0.menu) }
+        } else if let activated = windows.values.first(where: \.isActivated) {
+            focused = activated.appID.map { ($0, nil) }
         }
-        if focused != appID {
-            appID = focused
-            onChange?(focused)
+        if focused == nil, let appID, windows.values.contains(where: { $0.appID == appID }) {
+            // Focus went to no window: to the desktop, or to the menu bar
+            // itself under compositors that move focus to it. The app keeps
+            // the bar while it has a window open.
+            focused = (appID, menu)
+        }
+        if focused?.appID != appID || focused?.menu != menu {
+            appID = focused?.appID
+            menu = focused?.menu
+            onChange?()
         }
     }
-    #endif
 }
