@@ -132,6 +132,9 @@ void cwl_server_run(CWLServer *server);
 /// Makes `cwl_server_run` return.
 void cwl_server_terminate(CWLServer *server);
 
+/// Turns the desktop's effects on or off: window shadows, for now.
+void cwl_server_set_effects(CWLServer *server, bool effects);
+
 /// Whether the server runs on a VT with a seat session of its own, as the
 /// desktop session does, rather than nested or headless.
 bool cwl_server_has_seat_session(CWLServer *server);
