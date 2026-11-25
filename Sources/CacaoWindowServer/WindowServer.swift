@@ -4,7 +4,9 @@
 //
 
 import CWLRoots
+import CacaoDBus
 import CacaoShellKit
+import CacaoTokens
 import Foundation
 
 /// The compositor: the wlroots shim with window policy in Swift.
@@ -204,6 +206,50 @@ final class WindowServer {
         guard focusedWindow !== window else { return }
         focusedWindow = window
         focusChanged()
+    }
+
+    /// Whether the window server runs the session on a VT.
+    var hasSeatSession: Bool {
+        server.map(cwl_server_has_seat_session) ?? false
+    }
+
+    // MARK: Appearance
+
+    /// Hears the settings portal's changes for as long as the server runs.
+    private var appearanceObserver: PortalAppearanceObserver?
+
+    /// Follows the desktop's appearance from the settings portal, as Cacao
+    /// apps do, and draws title bars in it: light or dark, the accent and
+    /// contrast, and the window buttons' layout.
+    func followAppearance() {
+        let queue = mainQueue
+        Task.detached {
+            let started = await PortalAppearanceObserver.start { appearance in
+                queue.async {
+                    WindowServer.current?.appearanceChanged(appearance)
+                }
+            }
+            guard let started else {
+                log("No session bus, so title bars keep the default appearance")
+                return
+            }
+            let observer = started.observer
+            queue.async {
+                WindowServer.current?.appearanceObserver = observer
+                WindowServer.current?.appearanceChanged(started.appearance)
+            }
+        }
+    }
+
+    private func appearanceChanged(_ appearance: Appearance) {
+        let tokens = StyleTokens(appearance: appearance)
+        let layout = appearance.buttonLayout ?? .standard
+        guard tokens != TitleBar.tokens || layout != TitleBar.layout else { return }
+        TitleBar.tokens = tokens
+        TitleBar.layout = layout
+        for window in windows.values {
+            window.updateTitleBar(redraw: true)
+        }
     }
 
     /// Ends the session: the event loop stops, and apps lose their windows
