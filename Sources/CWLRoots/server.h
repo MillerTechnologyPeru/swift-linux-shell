@@ -86,6 +86,7 @@ struct CWLServer {
     struct wlr_xcursor_manager *cursor_manager;
     struct wl_global *appmenu_global;
     struct wl_global *dock_global;
+    struct wl_list minimize_targets;  // struct cwl_minimize_target.link
     struct wlr_foreign_toplevel_manager_v1 *foreign_toplevels;
 
     // An interactive move or resize.
@@ -161,6 +162,8 @@ struct CWLToplevel {
     /// once it's been shown.
     struct wlr_scene_tree *shadow;
     struct wlr_scene_buffer *shadow_pieces[9];
+    /// The minimize animation running, if any.
+    struct cwl_animation *animation;
     /// The title bar the compositor draws, or NULL.
     struct wlr_scene_buffer *title_bar;
     int title_bar_height;
@@ -254,6 +257,32 @@ struct wlr_buffer *cwl_pixel_buffer_create(const void *pixels, int32_t width, in
 /// Where the window's visible content starts in its frame: below the title
 /// bar, if it has one.
 void cwl_toplevel_content_offset(CWLToplevel *toplevel, int *x, int *y);
+
+// MARK: animation.c
+
+/// Shrinks the window into its minimize target, or grows it back out, when
+/// effects are on. Returns false when there's no animation: the caller
+/// hides or shows the window itself. Ends any animation already running.
+bool cwl_toplevel_animate_minimize(CWLToplevel *toplevel, bool minimizing);
+
+/// Ends a running animation where it was going.
+void cwl_toplevel_finish_animation(CWLToplevel *toplevel);
+
+/// Keeps a running animation's scale after the window commits.
+void cwl_toplevel_animation_committed(CWLToplevel *toplevel);
+
+/// Drops a running animation without putting anything back, as when the
+/// window is destroyed.
+void cwl_toplevel_cancel_animation(CWLToplevel *toplevel);
+
+// MARK: dock.c
+
+/// The minimize target the dock set for an app, in the layout's
+/// coordinates.
+bool cwl_dock_minimize_target(CWLServer *server, const char *app_id, struct wlr_box *box);
+
+/// Frees the minimize targets.
+void cwl_dock_finish(CWLServer *server);
 
 // MARK: shadow.c
 
