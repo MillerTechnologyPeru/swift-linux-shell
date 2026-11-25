@@ -1,4 +1,6 @@
-# sway as the stand-in compositor for the Cacao session (phases 1 to 6).
+# sway as the stand-in compositor for the Cacao session: the default in
+# phases 1 to 6, and a fallback since CacaoWindowServer replaced it
+# (`cacao-session --sway`, the Cacao (sway) session).
 #
 # Every window floats, so behavior stays close to the final desktop. There is
 # no swaybar: the menu bar and dock are Cacao's.
