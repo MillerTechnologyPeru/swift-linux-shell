@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Cacao (sway)
+Comment=The Cacao desktop on sway, the stand-in compositor from before CacaoWindowServer
+Exec=cacao-session --sway
+DesktopNames=Cacao
