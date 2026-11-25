@@ -10,6 +10,7 @@ add_library(CWLRoots STATIC
   appmenu.c
   dock.c
   layer.c
+  protocols.c
   server.c
   toplevel.c)
 
