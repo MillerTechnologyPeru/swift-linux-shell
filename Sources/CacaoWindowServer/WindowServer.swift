@@ -67,6 +67,14 @@ final class WindowServer {
                 Unmanaged<WindowServer>.fromOpaque(context).takeUnretainedValue().usableAreaChanged(area)
             }
         }
+        callbacks.key_shortcut = { context, modifiers, keysym in
+            guard let context else { return false }
+            nonisolated(unsafe) let unsafeContext = context
+            return MainActor.assumeIsolated {
+                let server = Unmanaged<WindowServer>.fromOpaque(unsafeContext).takeUnretainedValue()
+                return server.policy.shortcut(Shortcut(keysym: keysym, modifiers: modifiers), server: server)
+            }
+        }
         callbacks.expose_requested = { context, mode, appID in
             guard let context else { return }
             let appID = appID.map { String(cString: $0) }
