@@ -12,7 +12,6 @@ The Cacao desktop: a compositor, menu bar, dock and settings service, written in
 | `CacaoMenuBar` | Executable | The menu bar, and the status bar in tablet and phone modes |
 | `CacaoDock` | Executable | The dock, the app grid and launcher entries |
 | `CacaoSettings` | Executable | The settings daemon and portal backend |
-| `CacaoDesktop` | Executable | The wallpaper, until the file manager owns the desktop |
 | `CacaoShellKit` | Library | Form factor, desktop entries, D-Bus names and settings, and the Swift side of the dock protocol |
 | `CWLRoots` | C target | The thin C shim over wlroots |
 | `CShellProtocols` | C target | Code generated from protocol XML by `Scripts/generate-protocols.sh` |

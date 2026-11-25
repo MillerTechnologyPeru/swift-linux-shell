@@ -23,6 +23,7 @@ exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DE
 
 # The shell
 exec CacaoSettings
-exec CacaoDesktop
+# The desktop's wallpaper and icons, from Files (swift-linux-core-apps).
+exec files --desktop
 exec CacaoMenuBar
 exec CacaoDock
