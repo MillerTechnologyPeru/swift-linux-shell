@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <wlr/version.h>
+#include <wlr/types/wlr_xdg_activation_v1.h>
 #include "server.h"
 
 const char *cwl_wlroots_version(void) {
@@ -170,6 +171,12 @@ static void server_new_input(struct wl_listener *listener, void *data) {
     default:
         break;
     }
+    cwl_server_update_capabilities(server);
+}
+
+void cwl_server_update_capabilities(CWLServer *server) {
+    // There's always a cursor, even before a mouse is plugged in or when
+    // only a virtual pointer moves it.
     uint32_t capabilities = WL_SEAT_CAPABILITY_POINTER;
     if (!wl_list_empty(&server->keyboards)) {
         capabilities |= WL_SEAT_CAPABILITY_KEYBOARD;
@@ -191,7 +198,96 @@ static struct wlr_surface *surface_at(CWLServer *server, double lx, double ly, d
     return scene_surface ? scene_surface->surface : NULL;
 }
 
+// MARK: Interactive move and resize
+
+void cwl_server_end_grab(CWLServer *server) {
+    // A window being resized is told when it ends, unless it's going.
+    if (server->cursor_mode == CWL_CURSOR_RESIZE && server->grabbed && server->grabbed->mapped) {
+        wlr_xdg_toplevel_set_resizing(server->grabbed->xdg_toplevel, false);
+    }
+    server->cursor_mode = CWL_CURSOR_PASSTHROUGH;
+    server->grabbed = NULL;
+}
+
+static void process_cursor_move(CWLServer *server) {
+    CWLToplevel *toplevel = server->grabbed;
+    wlr_scene_node_set_position(&toplevel->scene_tree->node,
+                                server->cursor->x - server->grab_x,
+                                server->cursor->y - server->grab_y);
+}
+
+static void process_cursor_resize(CWLServer *server) {
+    // The grabbed edges follow the pointer; the others stay put. The window
+    // gets the new size in a configure and draws it when it can.
+    CWLToplevel *toplevel = server->grabbed;
+    double border_x = server->cursor->x - server->grab_x;
+    double border_y = server->cursor->y - server->grab_y;
+    int left = server->grab_box.x;
+    int right = server->grab_box.x + server->grab_box.width;
+    int top = server->grab_box.y;
+    int bottom = server->grab_box.y + server->grab_box.height;
+
+    if (server->resize_edges & WLR_EDGE_TOP) {
+        top = border_y;
+        if (top >= bottom) top = bottom - 1;
+    } else if (server->resize_edges & WLR_EDGE_BOTTOM) {
+        bottom = border_y;
+        if (bottom <= top) bottom = top + 1;
+    }
+    if (server->resize_edges & WLR_EDGE_LEFT) {
+        left = border_x;
+        if (left >= right) left = right - 1;
+    } else if (server->resize_edges & WLR_EDGE_RIGHT) {
+        right = border_x;
+        if (right <= left) right = left + 1;
+    }
+
+    struct wlr_box geometry;
+    wlr_xdg_surface_get_geometry(toplevel->xdg_toplevel->base, &geometry);
+    wlr_scene_node_set_position(&toplevel->scene_tree->node, left - geometry.x, top - geometry.y);
+    wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, right - left, bottom - top);
+}
+
+static void begin_grab(CWLToplevel *toplevel, enum cwl_cursor_mode mode, uint32_t edges) {
+    CWLServer *server = toplevel->server;
+    struct wlr_scene_node *node = &toplevel->scene_tree->node;
+    server->grabbed = toplevel;
+    server->cursor_mode = mode;
+    if (mode == CWL_CURSOR_MOVE) {
+        server->grab_x = server->cursor->x - node->x;
+        server->grab_y = server->cursor->y - node->y;
+        return;
+    }
+    struct wlr_box geometry;
+    wlr_xdg_surface_get_geometry(toplevel->xdg_toplevel->base, &geometry);
+    double border_x = (node->x + geometry.x) + ((edges & WLR_EDGE_RIGHT) ? geometry.width : 0);
+    double border_y = (node->y + geometry.y) + ((edges & WLR_EDGE_BOTTOM) ? geometry.height : 0);
+    server->grab_x = server->cursor->x - border_x;
+    server->grab_y = server->cursor->y - border_y;
+    server->grab_box = geometry;
+    server->grab_box.x += node->x;
+    server->grab_box.y += node->y;
+    server->resize_edges = edges;
+    wlr_xdg_toplevel_set_resizing(toplevel->xdg_toplevel, true);
+}
+
+void cwl_toplevel_begin_move(CWLToplevel *toplevel) {
+    begin_grab(toplevel, CWL_CURSOR_MOVE, 0);
+}
+
+void cwl_toplevel_begin_resize(CWLToplevel *toplevel, CWLEdges edges) {
+    begin_grab(toplevel, CWL_CURSOR_RESIZE, (uint32_t)edges);
+}
+
 static void process_cursor_motion(CWLServer *server, uint32_t time) {
+    if (server->cursor_mode == CWL_CURSOR_MOVE) {
+        process_cursor_move(server);
+        return;
+    }
+    if (server->cursor_mode == CWL_CURSOR_RESIZE) {
+        process_cursor_resize(server);
+        return;
+    }
     double sx, sy;
     struct wlr_surface *surface = surface_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
     if (!surface) {
@@ -220,12 +316,30 @@ static void cursor_motion_absolute(struct wl_listener *listener, void *data) {
 static void cursor_button(struct wl_listener *listener, void *data) {
     CWLServer *server = wl_container_of(listener, server, cursor_button);
     struct wlr_pointer_button_event *event = data;
-    wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
     if (event->state != WL_POINTER_BUTTON_STATE_PRESSED) {
+        if (server->cursor_mode != CWL_CURSOR_PASSTHROUGH) {
+            // The end of a move or resize.
+            cwl_server_end_grab(server);
+        }
+        wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
         return;
     }
+    wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
     double sx, sy;
     struct wlr_surface *surface = surface_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
+    // A layer surface that takes the keyboard when clicked, such as the menu
+    // bar, gets it. The focused window stays active, so the menu bar keeps
+    // showing its menus.
+    struct wlr_layer_surface_v1 *layer = surface ? wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface_get_root_surface(surface)) : NULL;
+    if (layer && layer->current.keyboard_interactive != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE) {
+        struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
+        if (keyboard) {
+            wlr_seat_keyboard_notify_enter(server->seat, layer->surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+        } else {
+            wlr_seat_keyboard_notify_enter(server->seat, layer->surface, NULL, 0, NULL);
+        }
+        return;
+    }
     CWLToplevel *toplevel = surface ? cwl_toplevel_from_surface(server, surface) : NULL;
     if (toplevel && server->callbacks.toplevel_clicked) {
         server->callbacks.toplevel_clicked(server->callbacks.context, toplevel);
@@ -256,6 +370,17 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
     CWLServer *server = wl_container_of(listener, server, request_set_selection);
     struct wlr_seat_request_set_selection_event *event = data;
     wlr_seat_set_selection(server->seat, event->source, event->serial);
+}
+
+// MARK: Activation
+
+static void handle_request_activate(struct wl_listener *listener, void *data) {
+    CWLServer *server = wl_container_of(listener, server, request_activate);
+    struct wlr_xdg_activation_v1_request_activate_event *event = data;
+    CWLToplevel *toplevel = cwl_toplevel_from_surface(server, event->surface);
+    if (toplevel && toplevel->mapped && server->callbacks.toplevel_requested_activation) {
+        server->callbacks.toplevel_requested_activation(server->callbacks.context, toplevel);
+    }
 }
 
 // MARK: Server
@@ -303,9 +428,12 @@ CWLServer *cwl_server_create(CWLServerCallbacks callbacks) {
     server->layers[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM] = wlr_scene_tree_create(&server->scene->tree);
     server->windows = wlr_scene_tree_create(&server->scene->tree);
     server->layers[ZWLR_LAYER_SHELL_V1_LAYER_TOP] = wlr_scene_tree_create(&server->scene->tree);
+    server->fullscreen = wlr_scene_tree_create(&server->scene->tree);
     server->layers[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY] = wlr_scene_tree_create(&server->scene->tree);
 
-    server->xdg_shell = wlr_xdg_shell_create(server->display, 3);
+    // Version 5 tells windows what the window manager can do
+    // (wm_capabilities), so they show only the buttons that work.
+    server->xdg_shell = wlr_xdg_shell_create(server->display, 5);
     server->new_toplevel.notify = cwl_handle_new_toplevel;
     wl_signal_add(&server->xdg_shell->events.new_toplevel, &server->new_toplevel);
     server->new_popup.notify = cwl_handle_new_popup;
@@ -341,6 +469,19 @@ CWLServer *cwl_server_create(CWLServerCallbacks callbacks) {
         wlr_log(WLR_ERROR, "Could not create the appmenu and dock globals");
         goto fail;
     }
+    if (!cwl_protocols_init(server)) {
+        wlr_log(WLR_ERROR, "Could not create the decoration and virtual pointer globals");
+        goto fail;
+    }
+    server->protocols_ready = true;
+
+    // The window list the dock and menu bar read.
+    server->foreign_toplevels = wlr_foreign_toplevel_manager_v1_create(server->display);
+
+    // Apps handing focus to each other, as when a link opens a browser.
+    struct wlr_xdg_activation_v1 *activation = wlr_xdg_activation_v1_create(server->display);
+    server->request_activate.notify = handle_request_activate;
+    wl_signal_add(&activation->events.request_activate, &server->request_activate);
 
     return server;
 
@@ -390,6 +531,10 @@ void cwl_server_destroy(CWLServer *server) {
         wl_list_remove(&server->new_input.link);
         wl_list_remove(&server->request_cursor.link);
         wl_list_remove(&server->request_set_selection.link);
+        if (server->protocols_ready) {
+            wl_list_remove(&server->request_activate.link);
+            cwl_protocols_finish(server);
+        }
         wl_list_remove(&server->new_output.link);
         wlr_scene_node_destroy(&server->scene->tree.node);
         wlr_xcursor_manager_destroy(server->cursor_manager);
@@ -414,6 +559,31 @@ CWLBox cwl_server_usable_area(CWLServer *server) {
     return server->usable_area;
 }
 
+CWLBox cwl_server_output_box(CWLServer *server) {
+    if (wl_list_empty(&server->outputs)) {
+        return (CWLBox){ 0 };
+    }
+    struct cwl_output *output = wl_container_of(server->outputs.next, output, link);
+    struct wlr_box box;
+    wlr_output_layout_get_box(server->output_layout, output->wlr_output, &box);
+    return (CWLBox){ box.x, box.y, box.width, box.height };
+}
+
+void cwl_server_clear_focus(CWLServer *server) {
+    struct wlr_surface *previous = server->seat->keyboard_state.focused_surface;
+    if (previous) {
+        struct wlr_xdg_toplevel *toplevel = wlr_xdg_toplevel_try_from_wlr_surface(previous);
+        if (toplevel) {
+            wlr_xdg_toplevel_set_activated(toplevel, false);
+            CWLToplevel *window = cwl_toplevel_from_surface(server, previous);
+            if (window) {
+                cwl_toplevel_handle_set_activated(window, false);
+            }
+        }
+    }
+    wlr_seat_keyboard_notify_clear_focus(server->seat);
+}
+
 CWLToplevel *cwl_server_focused_toplevel(CWLServer *server) {
     struct wlr_surface *surface = server->seat->keyboard_state.focused_surface;
     return surface ? cwl_toplevel_from_surface(server, surface) : NULL;
@@ -429,5 +599,9 @@ void cwl_server_terminate(CWLServer *server) {}
 void cwl_server_destroy(CWLServer *server) {}
 CWLBox cwl_server_usable_area(CWLServer *server) { return (CWLBox){ 0 }; }
 CWLToplevel *cwl_server_focused_toplevel(CWLServer *server) { return NULL; }
+CWLBox cwl_server_output_box(CWLServer *server) { return (CWLBox){ 0 }; }
+void cwl_server_clear_focus(CWLServer *server) {}
+void cwl_toplevel_begin_move(CWLToplevel *toplevel) {}
+void cwl_toplevel_begin_resize(CWLToplevel *toplevel, CWLEdges edges) {}
 
 #endif

@@ -30,6 +30,16 @@ typedef struct CWLBox {
     int32_t height;
 } CWLBox;
 
+/// Edges of a window being resized; the values are wlroots' and
+/// xdg-shell's.
+typedef enum CWLEdges {
+    CWLEdgeNone = 0,
+    CWLEdgeTop = 1 << 0,
+    CWLEdgeBottom = 1 << 1,
+    CWLEdgeLeft = 1 << 2,
+    CWLEdgeRight = 1 << 3
+} CWLEdges;
+
 /// What the dock asked Exposé to show.
 typedef enum CWLExposeMode {
     CWLExposeModeAllWindows = 0,
@@ -61,6 +71,23 @@ typedef struct CWLServerCallbacks {
     /// The dock asked for Exposé. `app_id` is NULL unless the mode is
     /// CWLExposeModeAppWindows.
     void (*expose_requested)(void *context, CWLExposeMode mode, const char *app_id);
+
+    // Requests a window, the dock or another app makes. Each is the
+    // policy's to grant: nothing happens until Swift acts on it.
+
+    /// The window asked to be moved with the pointer, as from its title bar.
+    void (*toplevel_requested_move)(void *context, CWLToplevel *toplevel);
+    /// The window asked to be resized with the pointer from some edges.
+    void (*toplevel_requested_resize)(void *context, CWLToplevel *toplevel, CWLEdges edges);
+    /// The window, or the dock, asked to be maximized or restored.
+    void (*toplevel_requested_maximize)(void *context, CWLToplevel *toplevel, bool maximized);
+    /// The window, or the dock, asked to be full screen or not.
+    void (*toplevel_requested_fullscreen)(void *context, CWLToplevel *toplevel, bool fullscreen);
+    /// The window, or the dock, asked to be minimized or restored.
+    void (*toplevel_requested_minimize)(void *context, CWLToplevel *toplevel, bool minimized);
+    /// The dock, or another app through xdg-activation, asked for the
+    /// window to come forward and take focus.
+    void (*toplevel_requested_activation)(void *context, CWLToplevel *toplevel);
 } CWLServerCallbacks;
 
 /// The version of wlroots the shim was built against.
@@ -89,8 +116,15 @@ void cwl_server_destroy(CWLServer *server);
 /// coordinates. Empty with no outputs.
 CWLBox cwl_server_usable_area(CWLServer *server);
 
+/// The whole of the first output, in layout coordinates. Empty with no
+/// outputs.
+CWLBox cwl_server_output_box(CWLServer *server);
+
 /// The window with keyboard focus, or NULL.
 CWLToplevel *cwl_server_focused_toplevel(CWLServer *server);
+
+/// Takes keyboard focus from every window, as when the last one goes.
+void cwl_server_clear_focus(CWLServer *server);
 
 // MARK: Toplevels
 
@@ -120,5 +154,24 @@ void cwl_toplevel_focus(CWLToplevel *toplevel);
 
 /// Asks the window to close.
 void cwl_toplevel_close(CWLToplevel *toplevel);
+
+/// Moves the window with the pointer until the button is released.
+void cwl_toplevel_begin_move(CWLToplevel *toplevel);
+
+/// Resizes the window from some edges with the pointer until the button is
+/// released.
+void cwl_toplevel_begin_resize(CWLToplevel *toplevel, CWLEdges edges);
+
+/// Tells the window, and the window list, whether it's maximized. The
+/// policy sets its position and size.
+void cwl_toplevel_set_maximized(CWLToplevel *toplevel, bool maximized);
+
+/// Tells the window, and the window list, whether it's full screen, and
+/// puts it above the menu bar and dock or back among the windows. The
+/// policy sets its position and size.
+void cwl_toplevel_set_fullscreen(CWLToplevel *toplevel, bool fullscreen);
+
+/// Hides or shows the window, and tells the window list it's minimized.
+void cwl_toplevel_set_minimized(CWLToplevel *toplevel, bool minimized);
 
 #endif
