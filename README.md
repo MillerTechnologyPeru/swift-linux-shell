@@ -18,7 +18,7 @@ The Cacao desktop: a compositor, menu bar, dock and settings service, written in
 | `CToplevelList` | C target | The dock's client of the compositor's window list (wlr-foreign-toplevel-management) |
 
 - `Protocols/` holds the private dock protocol, and the third-party protocol XML the generated code comes from.
-- `Data/` holds the portal registration, the D-Bus service file, the session entry and the sway config for the stand-in session.
+- `Data/` holds the portal registration, the D-Bus service files, the session script and its entries, and the sway config for the stand-in session.
 
 ## Building
 
@@ -31,7 +31,9 @@ swift build
 
 SDL3 is needed for the menu bar and dock, as for Cacao. One wlroots release is pinned: 0.18.
 
-Until `CacaoWindowServer` replaces it, sway runs the session with `Data/sway/config`. The compositor can be run nested in another Wayland or X11 session:
+Until `CacaoWindowServer` replaces it, sway runs the default session with `Data/sway/config`. The session on `CacaoWindowServer` has its own entry, Cacao (CacaoWindowServer), which runs `cacao-session --window-server`. In it, Control-Alt-F1 to F12 switch VTs, and Super-Shift-Q logs out.
+
+The compositor can also be run nested in another Wayland or X11 session:
 
 ```sh
 swift run CacaoWindowServer -s foot

@@ -1,6 +1,6 @@
 # The session's data files: the portal backend's registration and D-Bus
-# activation, and the session that runs sway until CacaoWindowServer
-# replaces it.
+# activation, and the sessions: on sway until CacaoWindowServer replaces it,
+# and on CacaoWindowServer.
 
 # The settings service starts on demand under either name: the portal
 # backend's, when xdg-desktop-portal first needs it, and its own, when the
@@ -23,8 +23,10 @@ install(FILES
     cacao-portals.conf
   DESTINATION ${CMAKE_INSTALL_DATADIR}/xdg-desktop-portal)
 
+# The session on CacaoWindowServer is its own entry until it replaces sway.
 install(FILES
     cacao.desktop
+    cacao-window-server.desktop
   DESTINATION ${CMAKE_INSTALL_DATADIR}/wayland-sessions)
 install(PROGRAMS
     cacao-session
