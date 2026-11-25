@@ -147,6 +147,24 @@ final class WindowServer {
                 Unmanaged<WindowServer>.fromOpaque(unsafeContext).takeUnretainedValue().mainQueue.drain()
             }
         }
+        callbacks.expose_window_chosen = { context, toplevel in
+            guard let context else { return }
+            nonisolated(unsafe) let unsafeContext = context
+            nonisolated(unsafe) let unsafeToplevel = toplevel
+            MainActor.assumeIsolated {
+                let server = Unmanaged<WindowServer>.fromOpaque(unsafeContext).takeUnretainedValue()
+                let window = unsafeToplevel.flatMap { server.windows[$0] }
+                server.policy.exposeChose(window, server: server)
+            }
+        }
+        callbacks.expose_key = { context, keysym in
+            guard let context else { return }
+            nonisolated(unsafe) let unsafeContext = context
+            MainActor.assumeIsolated {
+                let server = Unmanaged<WindowServer>.fromOpaque(unsafeContext).takeUnretainedValue()
+                server.policy.exposeKey(keysym, server: server)
+            }
+        }
         callbacks.toplevel_title_bar_changed = { context, toplevel in
             WindowServer.dispatch(context, toplevel) { server, toplevel in
                 server.windows[toplevel]?.updateTitleBar()
@@ -489,7 +507,27 @@ final class WindowServer {
     }
 
     private func exposeRequested(_ mode: DockProtocol.ExposeMode, appID: String?) {
-        log("Exposé requested: \(mode), app \(appID ?? "none"). Not implemented yet.")
+        policy.expose(mode, appID: appID, server: self)
+    }
+
+    // MARK: Exposé
+
+    /// Whether Exposé is showing.
+    var isExposing: Bool {
+        server.map(cwl_server_expose_active) ?? false
+    }
+
+    /// Starts Exposé: place windows with `Window.showPreview(in:)`, and
+    /// hide the rest with `Window.hideForExpose()`.
+    func beginExpose() {
+        guard let server else { return }
+        cwl_server_begin_expose(server)
+    }
+
+    /// Ends Exposé, moving the windows back.
+    func endExpose() {
+        guard let server else { return }
+        cwl_server_end_expose(server)
     }
 
     /// Tells the shell, for the menu bar to show the window's menus.

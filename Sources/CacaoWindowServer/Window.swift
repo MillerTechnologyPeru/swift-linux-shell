@@ -49,6 +49,16 @@ final class Window {
         cwl_toplevel_set_space(toplevel, Int32(space))
     }
 
+    /// Draws the window smaller, fitted into a box, while Exposé lasts.
+    func showPreview(in box: CWLBox) {
+        cwl_toplevel_show_preview(toplevel, box)
+    }
+
+    /// Hides the window while Exposé lasts.
+    func hideForExpose() {
+        cwl_toplevel_hide_for_expose(toplevel)
+    }
+
     init(toplevel: OpaquePointer) {
         self.toplevel = toplevel
     }

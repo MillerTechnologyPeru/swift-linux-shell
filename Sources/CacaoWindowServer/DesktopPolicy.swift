@@ -4,6 +4,7 @@
 //
 
 import CWLRoots
+import CacaoShellKit
 import Foundation
 
 /// Free-floating windows: new windows cascade from the top left of the
@@ -63,7 +64,108 @@ final class DesktopPolicy: WindowPolicy {
             server.requestShellAction(.forceQuit)
             return true
         }
-        return spaceShortcut(shortcut, server: server)
+        return exposeShortcut(shortcut, server: server) || spaceShortcut(shortcut, server: server)
+    }
+
+    // MARK: Exposé
+
+    /// What Exposé shows while it's showing.
+    private var exposeMode: DockProtocol.ExposeMode?
+
+    /// The Mac's: Control-Up for every window, as Mission Control; Control-
+    /// Down for the focused app's; Command-F3 to show the desktop. Each
+    /// ends Exposé when it's showing.
+    private func exposeShortcut(_ shortcut: Shortcut, server: WindowServer) -> Bool {
+        if shortcut.matches(keysym: Shortcut.up, control: true) {
+            expose(.allWindows, appID: nil, server: server)
+            return true
+        }
+        if shortcut.matches(keysym: Shortcut.down, control: true) {
+            expose(.appWindows, appID: server.focusedWindow?.appID, server: server)
+            return true
+        }
+        if shortcut.matches(keysym: Shortcut.f3, super: true) {
+            expose(.desktop, appID: nil, server: server)
+            return true
+        }
+        return false
+    }
+
+    func expose(_ mode: DockProtocol.ExposeMode, appID: String?, server: WindowServer) {
+        if exposeMode != nil {
+            endExpose(focusing: nil, server: server)
+            return
+        }
+        let windows = server.visibleWindows
+        let shown: [Window]
+        switch mode {
+        case .allWindows:
+            shown = windows
+        case .appWindows:
+            guard let appID else { return }
+            shown = windows.filter { $0.appID == appID }
+        case .desktop:
+            shown = []
+        }
+        guard mode == .desktop || !shown.isEmpty else { return }
+        server.beginExpose()
+        exposeMode = mode
+        for window in windows where !shown.contains(where: { $0 === window }) {
+            window.hideForExpose()
+        }
+        let boxes = Self.exposeLayout(count: shown.count, in: server.usableArea)
+        for (window, box) in zip(shown, boxes) {
+            window.showPreview(in: box)
+        }
+    }
+
+    func exposeChose(_ window: Window?, server: WindowServer) {
+        endExpose(focusing: window, server: server)
+    }
+
+    func exposeKey(_ keysym: UInt32, server: WindowServer) {
+        if keysym == Shortcut.escape {
+            endExpose(focusing: nil, server: server)
+        }
+    }
+
+    private func endExpose(focusing window: Window?, server: WindowServer) {
+        exposeMode = nil
+        server.endExpose()
+        if let window {
+            server.focus(window)
+        }
+    }
+
+    /// Boxes for windows in a grid filling an area, in reading order, with
+    /// room between them.
+    static func exposeLayout(count: Int, in area: CWLBox) -> [CWLBox] {
+        guard count > 0, area.width > 0, area.height > 0 else { return [] }
+        let margin: Int32 = 48
+        let spacing: Int32 = 24
+        let width = area.width - margin * 2
+        let height = area.height - margin * 2
+        // As many columns as keep the cells about as wide as the area's
+        // shape suggests.
+        let aspect = Double(width) / Double(max(height, 1))
+        let columns = max(1, min(count, Int((Double(count) * aspect).squareRoot().rounded(.up))))
+        let rows = Int((Double(count) / Double(columns)).rounded(.up))
+        let cellWidth = (width - spacing * Int32(columns - 1)) / Int32(columns)
+        let cellHeight = (height - spacing * Int32(rows - 1)) / Int32(rows)
+        return (0..<count).map { index in
+            let row = index / columns
+            let column = index % columns
+            // The last row's cells are centered.
+            let inRow = row == rows - 1 ? count - row * columns : columns
+            let rowWidth = Int32(inRow) * cellWidth + Int32(inRow - 1) * spacing
+            let left = area.x + margin + (width - rowWidth) / 2
+            return CWLBox(
+                x: left + Int32(column) * (cellWidth + spacing),
+                y: area.y + margin + Int32(row) * (cellHeight + spacing),
+                width: cellWidth,
+                height: cellHeight
+            )
+        }
     }
 
     // MARK: Spaces
@@ -98,6 +200,9 @@ final class DesktopPolicy: WindowPolicy {
     /// Shows a space and focuses the window used last on it.
     func show(space: Int, server: WindowServer) {
         guard (0..<WindowServer.spaceCount).contains(space), space != server.currentSpace else { return }
+        if exposeMode != nil {
+            endExpose(focusing: nil, server: server)
+        }
         server.showSpace(space)
         if let next = server.visibleWindows.first {
             server.focus(next)

@@ -55,6 +55,16 @@ protocol WindowPolicy: AnyObject {
     /// The left button came up after going down on the window's title bar,
     /// at a point in the title bar, which may be outside it.
     func windowTitleBarReleased(_ window: Window, at point: CGPoint, server: WindowServer)
+
+    /// Exposé was asked for, as by the dock: started, or ended when it's
+    /// showing.
+    func expose(_ mode: DockProtocol.ExposeMode, appID: String?, server: WindowServer)
+
+    /// During Exposé, a window was clicked, or the desktop (nil).
+    func exposeChose(_ window: Window?, server: WindowServer)
+
+    /// During Exposé, a key was pressed that no shortcut took.
+    func exposeKey(_ keysym: UInt32, server: WindowServer)
 }
 
 /// A key pressed with modifiers, for the shell's own shortcuts.
@@ -89,9 +99,14 @@ struct Shortcut: Equatable {
     /// XKB's Escape.
     static let escape: UInt32 = 0xff1b
 
-    /// XKB's Left and Right arrows.
+    /// XKB's arrows.
     static let left: UInt32 = 0xff51
+    static let up: UInt32 = 0xff52
     static let right: UInt32 = 0xff53
+    static let down: UInt32 = 0xff54
+
+    /// XKB's F3.
+    static let f3: UInt32 = 0xffc0
 }
 
 @MainActor
