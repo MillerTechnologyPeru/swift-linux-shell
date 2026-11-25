@@ -67,6 +67,10 @@ public actor StatusNotifierHost {
 
     private var tasks = [Task<Void, Never>]()
 
+    /// The items being read, and whether they changed while being read,
+    /// which reads them again once the read is done.
+    private var loading = [String: Bool]()
+
     public init(connection: DBusConnection) {
         self.connection = connection
     }
@@ -171,24 +175,39 @@ public actor StatusNotifierHost {
     // MARK: Items
 
     private func load(_ name: String) async {
-        guard let (busName, path) = StatusNotifierWatcher.split(name),
-              let properties = try? await connection.getAllProperties(
-                  destination: busName,
-                  path: path,
-                  interface: ShellDBus.statusNotifierItemInterface
-              )
-        else { return }
-        let item = Self.item(id: name, busName: busName, path: path, properties: properties)
-        if let index = items.firstIndex(where: { $0.id == name }) {
-            guard items[index] != item else { return }
-            items[index] = item
-        } else {
-            items.append(item)
+        // Already being read: read again once that's done, as it may have
+        // been answered before this change.
+        guard loading[name] == nil else {
+            loading[name] = true
+            return
         }
-        continuation?.yield(items)
+        guard let (busName, path) = StatusNotifierWatcher.split(name) else { return }
+        repeat {
+            loading[name] = false
+            let properties = try? await connection.getAllProperties(
+                destination: busName,
+                path: path,
+                interface: ShellDBus.statusNotifierItemInterface
+            )
+            // Unregistered while it was read: it stays gone.
+            guard loading[name] != nil else { return }
+            guard let properties else { break }
+            let item = Self.item(id: name, busName: busName, path: path, properties: properties)
+            if let index = items.firstIndex(where: { $0.id == name }) {
+                if items[index] != item {
+                    items[index] = item
+                    continuation?.yield(items)
+                }
+            } else {
+                items.append(item)
+                continuation?.yield(items)
+            }
+        } while loading[name] == true
+        loading[name] = nil
     }
 
     private func remove(_ name: String) {
+        loading[name] = nil
         guard items.contains(where: { $0.id == name }) else { return }
         items.removeAll { $0.id == name }
         continuation?.yield(items)
@@ -197,11 +216,15 @@ public actor StatusNotifierHost {
     private func reload(sender: DBusBusName, path: DBusObjectPath) async {
         // The signal comes from the item's unique name, which a well-known
         // name it registered with doesn't show, so those are read again too.
-        let matching = items.filter { item in
-            item.path == path && (item.busName == sender || !item.busName.rawValue.hasPrefix(":"))
+        func matches(_ busName: DBusBusName, _ itemPath: DBusObjectPath) -> Bool {
+            itemPath == path && (busName == sender || !busName.rawValue.hasPrefix(":"))
         }
-        for item in matching {
-            await load(item.id)
+        let names = items.filter { matches($0.busName, $0.path) }.map(\.id)
+            + loading.keys.filter { name in
+                StatusNotifierWatcher.split(name).map { matches($0.busName, $0.path) } ?? false
+            }
+        for name in Set(names) {
+            await load(name)
         }
     }
 
