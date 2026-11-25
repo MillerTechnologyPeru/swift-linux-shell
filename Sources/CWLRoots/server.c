@@ -512,6 +512,7 @@ CWLServer *cwl_server_create(CWLServerCallbacks callbacks) {
     wl_list_init(&server->toplevels);
     wl_list_init(&server->keyboards);
     wl_list_init(&server->appmenus);
+    wl_list_init(&server->minimize_targets);
 
     server->display = wl_display_create();
     server->wake_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
@@ -680,6 +681,7 @@ void cwl_server_destroy(CWLServer *server) {
     if (server->shadow_image) {
         wlr_buffer_drop(server->shadow_image);
     }
+    cwl_dock_finish(server);
     if (server->wake_fd >= 0) {
         close(server->wake_fd);
     }
