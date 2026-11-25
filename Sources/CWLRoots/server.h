@@ -98,6 +98,12 @@ struct CWLServer {
     struct wl_event_source *slide_timer;
     int slide_from, slide_width;
     int64_t slide_start;
+    /// Exposé: the windows drawn smaller to pick one, while it lasts, and
+    /// moving in or out.
+    bool expose, expose_leaving;
+    int64_t expose_start;
+    struct wl_event_source *expose_timer;
+    struct wl_list previews;  // struct cwl_preview.link
     struct wl_list minimize_targets;  // struct cwl_minimize_target.link
     struct wlr_foreign_toplevel_manager_v1 *foreign_toplevels;
 
@@ -176,6 +182,8 @@ struct CWLToplevel {
     struct wlr_scene_buffer *shadow_pieces[9];
     /// The minimize animation running, if any.
     struct cwl_animation *animation;
+    /// The window during Exposé, if it's in it.
+    struct cwl_preview *preview;
     /// The space the window is on, and whether it's fullscreen there.
     int space;
     bool fullscreen;
@@ -273,6 +281,53 @@ struct wlr_buffer *cwl_pixel_buffer_create(const void *pixels, int32_t width, in
 /// bar, if it has one.
 void cwl_toplevel_content_offset(CWLToplevel *toplevel, int *x, int *y);
 
+// MARK: snapshot.c
+
+/// What a node had before a window was drawn smaller or fainter.
+struct cwl_node_snapshot {
+    struct wlr_scene_node *node;
+    int x, y;
+    /// For buffers: the size they're drawn at, and their opacity.
+    int width, height;
+    float opacity;
+};
+
+/// A window's tree as it was, to draw it smaller somewhere else and put it
+/// back.
+struct cwl_snapshot {
+    struct wlr_scene_tree *root;
+    int root_x, root_y;
+    /// The frame, title bar included, in the tree's coordinates.
+    struct wlr_box frame;
+    struct cwl_node_snapshot *nodes;
+    size_t count, capacity;
+};
+
+/// Keeps what every node of the window's tree has. False for a window with
+/// no frame yet.
+bool cwl_snapshot_take(struct cwl_snapshot *snapshot, CWLToplevel *toplevel);
+
+/// The frame where it was, in the layout's coordinates.
+struct wlr_box cwl_snapshot_frame_box(struct cwl_snapshot *snapshot);
+
+/// Draws the window with its frame fitted into a box in the layout, no
+/// larger than it is, at an opacity.
+void cwl_snapshot_draw(struct cwl_snapshot *snapshot, struct wlr_box box, float opacity);
+
+/// Puts every node back as it was.
+void cwl_snapshot_restore(struct cwl_snapshot *snapshot);
+
+void cwl_snapshot_finish(struct cwl_snapshot *snapshot);
+
+/// The monotonic clock, in milliseconds, for animations.
+int64_t cwl_now_ms(void);
+
+/// Eases in and out, from 0 to 1.
+double cwl_ease(double t);
+
+/// A box between two others.
+struct wlr_box cwl_box_mix(struct wlr_box from, struct wlr_box to, double t);
+
 // MARK: animation.c
 
 /// Shrinks the window into its minimize target, or grows it back out, when
@@ -289,6 +344,21 @@ void cwl_toplevel_animation_committed(CWLToplevel *toplevel);
 /// Drops a running animation without putting anything back, as when the
 /// window is destroyed.
 void cwl_toplevel_cancel_animation(CWLToplevel *toplevel);
+
+// MARK: expose.c
+
+/// Keeps Exposé's scale after the window commits.
+void cwl_toplevel_preview_committed(CWLToplevel *toplevel);
+
+/// Takes the window out of Exposé, as when it goes: put back as it was
+/// unless it's being destroyed.
+void cwl_toplevel_drop_preview(CWLToplevel *toplevel, bool restore);
+
+/// The window in Exposé at a point in the layout.
+CWLToplevel *cwl_expose_toplevel_at(CWLServer *server, double lx, double ly);
+
+/// Ends Exposé at once, as the server goes.
+void cwl_expose_finish(CWLServer *server);
 
 // MARK: spaces.c
 
